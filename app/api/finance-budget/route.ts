@@ -8,8 +8,7 @@ export const dynamic = "force-dynamic";
  * POST { value: number } → { ok: true } | { ok: false, error: string }
  *
  * Ver lib/financeBudget.ts para el mecanismo real (Vercel Global Config).
- * Sin autenticación — mismo criterio que el resto del dashboard, todavía
- * sin login (ver docs/explanation/estado-y-limitaciones.md).
+ * Solo quien tiene la página Finanzas: lo exige middleware.ts (permisos en lib/access.ts).
  */
 
 export async function GET() {

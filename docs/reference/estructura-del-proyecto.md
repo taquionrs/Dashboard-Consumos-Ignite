@@ -1,6 +1,7 @@
 # Estructura del proyecto
 
 ```
+middleware.ts                       # Login con SSO y permisos por página en cada pedido, salvo /api/cron/notify — ver configurar-sso-cloudflare.md
 app/
   layout.tsx                      # Shell raíz: fuente, metadata, importa globals.css
   page.tsx                        # Ruta "/" — renderiza <Dashboard /> (vista Finanzas)
@@ -14,6 +15,11 @@ app/
     MediosView.tsx                 # Vista Medios/Ignite — tabla de Campañas
     AnunciosView.tsx                # Vista Medios/Ignite — grilla de Anuncios
     ComparacionView.tsx              # Vista Medios/Ignite — comparación agregada por plataforma
+    SessionLinks.tsx                 # Encabezado: links a las secciones habilitadas (Finanzas, Medios, Usuarios) + cuenta y "Salir"
+    MediosNav.tsx                    # Pestañas de Medios: solo las páginas habilitadas
+    UsuariosView.tsx                 # Gestión de usuarios (solo administradores)
+  usuarios/page.tsx                 # Ruta "/usuarios" — <UsuariosView />
+  auth/login|callback|logout/route.ts  # Login OIDC con Cloudflare Zero Trust (ver lib/oidc.ts)
   api/
     spend/route.ts                 # GET /api/spend — ver api-spend.md (Finanzas)
     campaigns/route.ts               # GET /api/campaigns — ver api-medios.md (Medios, nivel campaña)
@@ -21,6 +27,11 @@ app/
     platform-comparison/route.ts      # GET /api/platform-comparison — ver api-medios.md
     finance-budget/route.ts           # GET/POST /api/finance-budget — Total presupuesto manual (Finanzas), ver lib/financeBudget.ts
 lib/
+  access.ts                         # Páginas, permisos y sesión (sin dependencias: lo usan también los componentes)
+  auth.ts                           # Configuración del login, cookies firmadas de sesión, administradores fijos
+  oidc.ts                           # Cliente OIDC (Authorization Code + PKCE) y validación del ID token
+  users.ts                          # Registro de usuarios y auditoría (Upstash Redis)
+  redis.ts                          # Cliente REST de Upstash, compartido con alertLog.ts
   types.ts                          # Tipos compartidos (PlatformKey, ClientData, CampaignRow, AdRow, ...)
   mockData.ts                        # Dataset de ejemplo de Finanzas — los 4 clientes ficticios
   mockCampaigns.ts                    # Dataset de ejemplo de Campañas (Medios), por plataforma

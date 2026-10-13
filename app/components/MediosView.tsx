@@ -2,6 +2,7 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import { MediosHeader, MediosSubnav } from "./PageChrome";
+import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady, type SourceStatus } from "./StatusUI";
 import { usePlatformSelection } from "@/lib/usePlatformSelection";
 import { useEffect, useRef, useState } from "react";
@@ -110,7 +111,7 @@ function dailyVsCurrentPct(daily: number, spend: number, today: number): number 
 // columnas específicas cuando corresponde.
 type MergedRow = CampaignRow & { platform: PlatformKey };
 
-export default function MediosView() {
+export default function MediosView({ session }: { session: Session }) {
   // Plataformas: la elección es la MISMA en todas las pantallas (se recuerda en el navegador) y por
   // defecto están todas prendidas; cada persona apaga las que no quiere ver. Ver lib/usePlatformSelection.ts.
   const { selection: platformsEnabled, toggle: togglePlatform, ready: selectionReady } = usePlatformSelection(PLATFORMS.map((p) => p.key));
@@ -242,8 +243,8 @@ export default function MediosView() {
 
   return (
     <div className="wrap">
-      <MediosHeader sub="Rendimiento por campaña — equipo Medios, Taquión" />
-      <MediosSubnav current="/medios" />
+      <MediosHeader sub="Rendimiento por campaña — equipo Medios, Taquión" session={session} />
+      <MediosSubnav current="/medios" session={session} />
 
       {mergedWarnings.map((w, i) => (
         <div className="mock-note" key={i}>

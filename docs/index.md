@@ -16,6 +16,7 @@ Esta documentación está organizada según el método **Diátaxis**: cuatro car
 - [Conectar Windsor.ai (Google Ads)](./how-to/conectar-windsor.md) — vía prioritaria
 - [Conectar Google Ads API directo](./how-to/conectar-google-ads.md) — fallback, ver nota en la guía
 - [Deployar a Vercel](./how-to/deploy-a-vercel.md)
+- [Configurar el login con SSO (Cloudflare Zero Trust) y los usuarios](./how-to/configurar-sso-cloudflare.md)
 - [Agregar una plataforma nueva al dashboard](./how-to/agregar-una-plataforma.md)
 
 ## Referencia (Reference)

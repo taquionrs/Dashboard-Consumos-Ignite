@@ -2,6 +2,7 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import { PageHeader } from "./PageChrome";
+import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
 import { usePlatformSelection } from "@/lib/usePlatformSelection";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -144,7 +145,7 @@ interface Row {
   campaigns?: FinanceCampaignRow[];
 }
 
-export default function Dashboard() {
+export default function Dashboard({ session }: { session: Session }) {
   const [data, setData] = useState<SpendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientKey, setClientKey] = useState<string>("all");
@@ -279,7 +280,7 @@ export default function Dashboard() {
     return computeSeries(clientsIncluded, data.today, data.daysInMonth, enabled);
   }, [data, clientsIncluded, enabled]);
 
-  const financeHeader = <PageHeader title="Pulso Ignite" sub="Consumo de pauta multi-cliente — equipo Ignite, Taquión" link={{ href: "/medios", label: "Ver perfil Medios →" }} />;
+  const financeHeader = <PageHeader title="Pulso Ignite" sub="Consumo de pauta multi-cliente — equipo Ignite, Taquión" session={session} current="finanzas" />;
   if (error) {
     return (
       <div className="wrap">
@@ -480,7 +481,7 @@ export default function Dashboard() {
       <PageHeader
         title="Pulso Ignite"
         sub="Consumo de pauta multi-cliente — equipo Ignite, Taquión"
-        link={{ href: "/medios", label: "Ver perfil Medios →" }}
+        session={session} current="finanzas"
         extra={
           <div className="num" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
             Día <b style={{ color: "var(--text-primary)" }}>{today}</b> de {daysInMonth} · ritmo ideal{" "}

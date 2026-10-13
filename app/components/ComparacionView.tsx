@@ -2,6 +2,7 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import { MediosHeader, MediosSubnav } from "./PageChrome";
+import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
 import { useEffect, useRef, useState } from "react";
 import type { PlatformComparisonResponse, PlatformKey } from "@/lib/types";
@@ -31,7 +32,7 @@ function fmtInt(n: number): string {
   return Math.round(n).toLocaleString("es-AR");
 }
 
-export default function ComparacionView() {
+export default function ComparacionView({ session }: { session: Session }) {
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
@@ -82,8 +83,8 @@ export default function ComparacionView() {
 
   return (
     <div className="wrap">
-      <MediosHeader sub="¿Dónde está rindiendo mejor la inversión? — equipo Medios, Taquión" />
-      <MediosSubnav current="/medios/comparacion" />
+      <MediosHeader sub="¿Dónde está rindiendo mejor la inversión? — equipo Medios, Taquión" session={session} />
+      <MediosSubnav current="/medios/comparacion" session={session} />
 
       {data?.warnings?.map((w, i) => (
         <div className="mock-note" key={i}>

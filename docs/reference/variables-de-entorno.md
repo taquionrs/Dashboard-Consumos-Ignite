@@ -2,7 +2,27 @@
 
 Plantilla completa en [`.env.example`](../../.env.example). Copiala a `.env.local` para desarrollo local; en producción se cargan en Vercel (Project Settings → Environment Variables — ver [cómo deployar](../how-to/deploy-a-vercel.md)).
 
-**Ninguna de estas variables es obligatoria para correr el proyecto** — si faltan, `/api/spend` usa el dataset de ejemplo automáticamente (ver [comportamiento de fallback](./api-spend.md#comportamiento-de-fallback)).
+**Ninguna de estas variables es obligatoria para correr el proyecto en local** — si faltan, `/api/spend` usa el dataset de ejemplo automáticamente (ver [comportamiento de fallback](./api-spend.md#comportamiento-de-fallback)). En **producción** sí son obligatorias las del [login con SSO](#login-con-sso-y-usuarios): sin ellas Pulso no deja entrar a nadie.
+
+## Login con SSO y usuarios
+
+Para entrar a Pulso hay que iniciar sesión con Cloudflare Zero Trust (aplicación SaaS OIDC), y cada persona ve solo las páginas que le habilitó un administrador en `/usuarios`. Paso a paso en [configurar el login con SSO](../how-to/configurar-sso-cloudflare.md); el código está en [`middleware.ts`](../../middleware.ts), [`lib/auth.ts`](../../lib/auth.ts), [`lib/oidc.ts`](../../lib/oidc.ts) y [`lib/users.ts`](../../lib/users.ts).
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `OIDC_ISSUER` | Sí, en producción | Emisor de la aplicación OIDC de Cloudflare: `https://quiet-lab-fdf2.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>`. |
+| `OIDC_CLIENT_ID` | Sí, en producción | ID de cliente de esa aplicación. |
+| `OIDC_CLIENT_SECRET` | Sí, en producción | Secreto de cliente. **Es una credencial**: solo en el hosting, como *Sensitive*. |
+| `SESSION_SECRET` | Sí, en producción | Clave aleatoria de 32+ caracteres que firma la cookie de sesión. Cambiarla cierra todas las sesiones. **Es una credencial.** |
+| `ADMIN_EMAILS` | Sí, para poder administrar | Administradores fijos, separados por coma: ven todo y no se pueden quitar desde `/usuarios`. |
+| `PULSO_PUBLIC_URL` | Recomendada | `https://pulso.taquion.com.ar`. Es la URL de vuelta del login, y quien abre una pantalla por otro dominio (`*.vercel.app`, `*.netlify.app`) es redirigido acá. |
+| `ALLOWED_EMAIL_DOMAINS` | No | Dominios que pueden entrar y darse de alta, separados por coma. Por omisión `taquion.com.ar` (lo mismo que deja pasar la política de Cloudflare). |
+| `SESSION_HOURS` | No | Duración de la sesión de Pulso, de 1 a 24 horas. Por omisión 12. |
+| `PULSO_DEV_EMAIL` / `PULSO_DEV_PAGES` | No — solo desarrollo local | Sin las variables `OIDC_*` y fuera de producción, `npm run dev` entra con este usuario y estas páginas (por omisión `dev@taquion.com.ar`, todas las páginas y administrador; ej. `PULSO_DEV_PAGES=anuncios,alertas`). Se ignoran en producción. |
+
+El registro de usuarios usa la misma base Upstash del [registro de alertas](#registro-de-alertas-upstash-redis) (`KV_REST_API_URL`/`KV_REST_API_TOKEN`). Sin ella solo entran los administradores fijos.
+
+Sin `OIDC_*`/`SESSION_SECRET` en producción, todas las pantallas y rutas `/api/*` responden **503**: el sitio nunca se abre por omisión. La única ruta que no pasa por el login es `/api/cron/notify` (ver [Resumen diario](#resumen-diario-al-equipo-google-chat-yo-email)).
 
 ## Google Ads API
 
@@ -58,7 +78,7 @@ Lo envía [`app/api/cron/notify`](../../app/api/cron/notify/route.ts), disparado
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
-| `CRON_SECRET` | Sí | Secreto largo y aleatorio. Vercel lo manda como `Authorization: Bearer …` al invocar el cron. **Sin esta variable la ruta responde 503 y no hace nada** — el sitio es público, la ruta no puede quedar abierta. |
+| `CRON_SECRET` | Sí | Secreto largo y aleatorio. Vercel lo manda como `Authorization: Bearer …` al invocar el cron. **Sin esta variable la ruta responde 503 y no hace nada** — es la única ruta sin login con SSO, no puede quedar abierta. |
 | `RESEND_API_KEY` | Solo para el canal de email | API key de [Resend](https://resend.com). |
 | `NOTIFY_FROM` | Solo para el canal de email | Remitente, ej. `Pulso Ignite <pulso@taquion.com.ar>`. El dominio tiene que estar verificado en Resend. |
 | `NOTIFY_TO` | Solo para el canal de email | Destinatarios separados por coma. |

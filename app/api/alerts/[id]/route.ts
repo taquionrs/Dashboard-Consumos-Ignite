@@ -1,19 +1,17 @@
 import { NextResponse } from "next/server";
 import { moderateAlert, readStoreConfig } from "@/lib/alertLog";
 import { isValidAlertId, validateModeration } from "@/lib/alertTypes";
+import { readSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /**
- * PATCH { status: "pending" | "reviewed" | "dismissed", note?, by } → modera una alerta.
+ * PATCH { status: "pending" | "reviewed" | "dismissed", note? } → modera una alerta.
  *
- * - `by` (quién modera) es obligatorio y queda en el historial de la alerta.
+ * - Quién modera (`by`) es la cuenta con la que se inició sesión en el SSO
+ *   (middleware.ts): un `by` que mande el navegador se ignora.
  * - Descartar exige una `note` con el motivo.
  * - Cada cambio se agrega al historial; nada se borra.
- *
- * ⚠️ Sin autenticación (no hay login todavía): `by` es el nombre que escribe quien
- * modera, no una identidad verificada. Proteger esta ruta es parte del login con
- * Supabase Auth del próximo sprint — igual que POST /api/finance-budget.
  */
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   if (!isValidAlertId(params.id)) {
@@ -23,7 +21,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: "El registro de alertas no está configurado." }, { status: 503 });
   }
   const body = await request.json().catch(() => null);
-  const parsed = validateModeration(body);
+  const by = readSession(request.headers).email;
+  const parsed = validateModeration(body && typeof body === "object" ? { ...body, by } : body);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
   try {
     const updated = await moderateAlert(params.id, parsed.value);

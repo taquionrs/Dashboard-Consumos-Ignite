@@ -33,7 +33,8 @@ export const maxDuration = 120;
  * GET /api/cron/notify            → arma y envía el resumen.
  * GET /api/cron/notify?dryRun=1   → arma el resumen y lo devuelve, sin enviar.
  *
- * Seguridad: el sitio es público, así que esta ruta NO responde sin
+ * Seguridad: es la única ruta que el login con SSO deja pasar (la llama el
+ * cron, no una persona; ver CRON_PATHS en lib/access.ts), así que NO responde sin
  * `Authorization: Bearer <CRON_SECRET>` (Vercel lo agrega solo al invocar el
  * cron cuando la variable CRON_SECRET existe en el proyecto). Si CRON_SECRET
  * no está configurada, la ruta queda cerrada: nunca se abre por omisión.

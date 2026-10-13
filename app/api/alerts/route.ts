@@ -10,8 +10,7 @@ export const dynamic = "force-dynamic";
  * { configured: false } = todavía no se conectó el almacenamiento (Upstash
  * Redis en Vercel → Storage): la pantalla explica cómo activarlo.
  *
- * Sin autenticación — mismo criterio que el resto del dashboard hasta que haya
- * login (ver docs/explanation/estado-y-limitaciones.md).
+ * Solo quien tiene la página Medios · Alertas: lo exige middleware.ts (permisos en lib/access.ts).
  */
 export async function GET() {
   if (!readStoreConfig()) {

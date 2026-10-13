@@ -24,6 +24,8 @@ npm run dev
 
 Abrí `http://localhost:3000` — funciona con datos de ejemplo sin ninguna variable de entorno. Guía completa: [levantar el proyecto por primera vez](./docs/tutorials/getting-started.md).
 
+**Acceso:** en producción se entra con el SSO de Taquion (Cloudflare Zero Trust), y cada persona ve solo las páginas que le habilitó un administrador en **Usuarios** (`/usuarios`). Ver [configurar el login con SSO](./docs/how-to/configurar-sso-cloudflare.md).
+
 ## Qué falta (backlog conocido)
 
 - **Google Ads + Meta Ads + TikTok Ads ya están conectados en vivo vía Windsor.ai** (Finanzas y las 3 vistas de Medios/Ignite) — lo que sigue pendiente es LinkedIn Ads, bloqueado por el plan Basic de Windsor (3 fuentes simultáneas, ya ocupadas — ver [estado y limitaciones](./docs/explanation/estado-y-limitaciones.md#por-qué-linkedin-ads-sigue-siendo-mock)).
@@ -31,5 +33,4 @@ Abrí `http://localhost:3000` — funciona con datos de ejemplo sin ninguna vari
 - Mapeo real cliente↔cuenta — hoy las cuentas reales aparecen por su nombre en la plataforma publicitaria, no por cliente interno de Taquión — ver [estado y limitaciones](./docs/explanation/estado-y-limitaciones.md#todos-los-clientes-del-dashboard-son-ficticios).
 - Persistencia/histórico real por día en Finanzas (el gráfico de "Ritmo de consumo" hoy se estima con un patrón semanal genérico sobre el acumulado real).
 - Rango de fecha "Personalizado" — todavía no está conectado en ninguna de las 4 vistas, cae a "Este mes".
-- Autenticación de acceso al dashboard (Supabase Auth — fase 2, no bloquea el trabajo actual).
 - Tests automatizados — no hay ninguno todavía.

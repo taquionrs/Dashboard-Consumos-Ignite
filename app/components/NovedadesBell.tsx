@@ -7,8 +7,8 @@ import { AREA_LABEL, NOVEDADES, TIPO_LABEL, countUnseen, isUnseen } from "@/lib/
  * Campanita de novedades del encabezado: un puntito con la cantidad de cosas que
  * todavía no se vieron y, al tocarla, el panel con los cambios (lib/novedades.ts).
  *
- * "Lo que ya viste" se recuerda en ESTE navegador (localStorage), no por usuario:
- * Pulso todavía no tiene login. Si el navegador no permite guardar, la campanita
+ * "Lo que ya viste" se recuerda en ESTE navegador (localStorage), no por usuario.
+ * Si el navegador no permite guardar, la campanita
  * funciona igual (siempre muestra todo como nuevo).
  */
 

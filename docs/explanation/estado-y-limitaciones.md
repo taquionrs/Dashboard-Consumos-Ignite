@@ -28,9 +28,16 @@ Se había implementado primero una integración directa a Google Ads API (OAuth2
 
 El gráfico de "Ritmo de consumo" muestra una curva de gasto acumulado día a día dentro del mes. Esa curva se **estima** a partir de un patrón semanal genérico (`WEEK_PATTERN` en `Dashboard.tsx`) aplicado sobre el único dato real que existe (`spend8`, el acumulado a la fecha de corte) — no son datos diarios reales de ninguna plataforma. Esto es una simplificación deliberada mientras no hay una capa de almacenamiento con histórico real (ver [Decisión de arquitectura de datos](./arquitectura-de-datos.md)): sin Supabase guardando un snapshot diario, no hay de dónde sacar el dato real día por día.
 
-## Por qué no hay autenticación todavía
+## Login con SSO de la empresa (Cloudflare Zero Trust), no Supabase Auth
 
-El dashboard no tiene login — cualquiera con la URL de producción puede verlo. Esto es aceptable mientras el uso sea interno del equipo de Ignite (ver [prioridad confirmada](./arquitectura-de-datos.md#prioridad-confirmada)), pero deja de serlo en cuanto haya datos reales de clientes reales visibles ahí. La autenticación (Supabase Auth) está deliberadamente pospuesta a la fase de multiusuario, no olvidada.
+Pulso estuvo sin login mientras fue una herramienta chica del equipo de Ignite. Con gasto real de clientes a la vista dejó de ser aceptable, y se cerró con el **SSO de Taquion** en lugar de Supabase Auth, con el mismo esquema que el Tablero de Seguimiento Táctico. Ver [configurar el login con SSO](../how-to/configurar-sso-cloudflare.md).
+
+- **Cloudflare autentica, Pulso autoriza.** Pulso es una aplicación *Access for SaaS* (OIDC): Cloudflare deja iniciar sesión a cualquier cuenta `@taquion.com.ar`, y qué páginas ve cada una lo define el registro de usuarios que los administradores manejan en `/usuarios`. Las altas no requieren tocar Cloudflare.
+- **Por qué OIDC y no Access "autoalojado":** el DNS de `taquion.com.ar` está en Netlify, así que Cloudflare no puede ponerse delante de Pulso como proxy. Con OIDC el login funciona igual en Vercel o en Netlify, y en cualquier dominio.
+- **Permisos por página**, cada una con sus rutas `/api/*`. Una ruta `/api/*` nueva queda cerrada para todos hasta que se la asigna a una página en `lib/access.ts`.
+- **Única excepción:** `/api/cron/notify`, que la llama el cron y se protege con `CRON_SECRET`.
+- **Límite conocido:** el middleware es el único punto de control (las rutas confían en la identidad que él les pasa; `/api/users` además lo vuelve a verificar). Next.js tiene que quedar en 14.2.25 o superior, que corrige el salteo de middleware de CVE-2025-29927; hoy el lockfile usa 14.2.35.
+- **Fase 2 sin cambios:** si algún día entran clientes externos con vista propia (ver [arquitectura de datos](./arquitectura-de-datos.md)), eso sigue siendo un tema aparte.
 
 ## Cómo se comporta ante una falla de Windsor.ai (2026-09-30)
 
@@ -41,6 +48,6 @@ Antes, cualquier falla de Windsor (timeout, HTTP 5xx) hacía que las rutas `/api
 - **Capas en paralelo** y cliente único a Windsor (`lib/windsorFetch.ts`): timeout de 20 s por consulta, un reintento ante 429/5xx/red (no ante timeout), máximo 8 consultas simultáneas por instancia. Las rutas declaran `maxDuration = 30`.
 - **Límite conocido:** un resultado *parcial* sin historial previo (p. ej. venció la capa de descubrimiento) se muestra igual, con su warning y sin cachear — los anuncios/cuentas sin actividad pueden faltar hasta el siguiente intento.
 
-## La moderación de alertas no tiene login
+## Quién modera las alertas
 
-La pantalla **Medios → Alertas** permite marcar alertas como revisadas o descartarlas. Como el dashboard todavía no tiene login, "quién modera" es el nombre que escribe la persona (queda en el historial de la alerta), no una identidad verificada, y cualquiera con la URL puede moderar. Es el mismo límite que ya tiene `POST /api/finance-budget`; se resuelve junto con la autenticación (Supabase Auth, próximo sprint).
+La pantalla **Medios → Alertas** permite marcar alertas como revisadas o descartarlas. Solo puede hacerlo quien tiene habilitada la página Medios · Alertas, y "quién modera" es la cuenta con la que se inició sesión en el SSO: la pone el servidor, no se escribe a mano. Los registros anteriores al login conservan el nombre que se escribió en su momento.

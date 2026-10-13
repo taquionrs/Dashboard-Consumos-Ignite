@@ -2,6 +2,7 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import { MediosHeader, MediosSubnav } from "./PageChrome";
+import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady, type SourceStatus } from "./StatusUI";
 import { usePlatformSelection } from "@/lib/usePlatformSelection";
 import { useEffect, useRef, useState } from "react";
@@ -100,7 +101,7 @@ function groupByCampaign(ads: MergedAd[]): CampaignGroup[] {
   return groups;
 }
 
-export default function AnunciosView() {
+export default function AnunciosView({ session }: { session: Session }) {
   // Plataformas: la elección es la MISMA en todas las pantallas (se recuerda en el navegador) y por
   // defecto están todas prendidas; cada persona apaga las que no quiere ver. Ver lib/usePlatformSelection.ts.
   const { selection: platformsEnabled, toggle: togglePlatform, ready: selectionReady } = usePlatformSelection(PLATFORMS.map((p) => p.key));
@@ -275,8 +276,8 @@ export default function AnunciosView() {
 
   return (
     <div className="wrap">
-      <MediosHeader sub="Rendimiento por campaña — equipo Medios, Taquión" />
-      <MediosSubnav current="/medios/anuncios" />
+      <MediosHeader sub="Rendimiento por campaña — equipo Medios, Taquión" session={session} />
+      <MediosSubnav current="/medios/anuncios" session={session} />
 
       {mergedWarnings.map((w, i) => (
         <div className="mock-note" key={i}>

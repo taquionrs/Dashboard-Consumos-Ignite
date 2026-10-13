@@ -2,13 +2,17 @@
 
 import type { ReactNode } from "react";
 import NovedadesBell from "./NovedadesBell";
+import SessionLinks from "./SessionLinks";
+import type { PageKey, Session } from "@/lib/access";
 
 /**
  * Encabezado y sub-navegación comunes. Se dibujan SIEMPRE, también mientras la
  * pantalla carga o si falla: así la campanita y los enlaces nunca desaparecen.
+ * Los enlaces y las pestañas muestran solo lo que el usuario tiene habilitado
+ * (sesión que arma middleware.ts; ver lib/access.ts).
  */
 
-export function PageHeader({ title, sub, link, extra }: { title: string; sub: string; link: { href: string; label: string }; extra?: ReactNode }) {
+export function PageHeader({ title, sub, session, current, extra }: { title: string; sub: string; session: Session; current: "finanzas" | "medios" | "usuarios"; extra?: ReactNode }) {
   return (
     <header className="top">
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -22,9 +26,9 @@ export function PageHeader({ title, sub, link, extra }: { title: string; sub: st
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
         <div style={{ textAlign: "right" }}>
           {extra}
-          <a href={link.href} style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            {link.label}
-          </a>
+          <div style={{ display: "flex", gap: 14, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <SessionLinks session={session} current={current} />
+          </div>
         </div>
         <NovedadesBell />
       </div>
@@ -32,17 +36,18 @@ export function PageHeader({ title, sub, link, extra }: { title: string; sub: st
   );
 }
 
-const MEDIOS_TABS = [
-  { href: "/medios", label: "Campañas" },
-  { href: "/medios/anuncios", label: "Anuncios" },
-  { href: "/medios/comparacion", label: "Comparación de plataformas" },
-  { href: "/medios/alertas", label: "Alertas" },
+const MEDIOS_TABS: { key: PageKey; href: string; label: string }[] = [
+  { key: "campanas", href: "/medios", label: "Campañas" },
+  { key: "anuncios", href: "/medios/anuncios", label: "Anuncios" },
+  { key: "comparacion", href: "/medios/comparacion", label: "Comparación de plataformas" },
+  { key: "alertas", href: "/medios/alertas", label: "Alertas" },
 ];
 
-export function MediosSubnav({ current }: { current: string }) {
+/** Pestañas de Medios: solo las páginas que el usuario tiene habilitadas. */
+export function MediosSubnav({ current, session }: { current: string; session: Session }) {
   return (
     <nav className="medios-subnav">
-      {MEDIOS_TABS.map((t) => (
+      {MEDIOS_TABS.filter((t) => session.pages.includes(t.key)).map((t) => (
         <a key={t.href} href={t.href} aria-current={t.href === current ? "page" : undefined}>
           {t.label}
         </a>
@@ -51,6 +56,6 @@ export function MediosSubnav({ current }: { current: string }) {
   );
 }
 
-export function MediosHeader({ sub }: { sub: string }) {
-  return <PageHeader title="Pulso Ignite — Medios" sub={sub} link={{ href: "/", label: "Ver perfil Finanzas →" }} />;
+export function MediosHeader({ sub, session }: { sub: string; session: Session }) {
+  return <PageHeader title="Pulso Ignite — Medios" sub={sub} session={session} current="medios" />;
 }

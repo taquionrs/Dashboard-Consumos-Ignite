@@ -28,7 +28,7 @@ La pantalla **Medios → Alertas** guarda cada alerta que envía el cron (martes
 
 Cada alerta puede quedar **Pendiente**, **Revisada** o **Descartada**. Descartar exige escribir el motivo. Todos los cambios (quién, cuándo, nota) quedan en el historial de la alerta; nada se borra.
 
-⚠️ **Sin login todavía**: "quién modera" es el nombre que escribe la persona, no una identidad verificada, y cualquiera con la URL puede moderar. Proteger la pantalla y la ruta `PATCH /api/alerts/<id>` es parte del login con Supabase Auth del próximo sprint.
+Solo modera quien tiene habilitada la página Medios · Alertas, y "quién modera" es la cuenta con la que se inició sesión en el SSO (ver [configurar el login con SSO](./configurar-sso-cloudflare.md)).
 
 ## Cuánto ocupa
 

@@ -1,14 +1,15 @@
 import type { AlertDraft, AlertRecord, ModerationInput, RunRecord } from "./alertTypes";
 import { isValidAlertId } from "./alertTypes";
+import { readStoreConfig, redisPipeline, type Cmd, type StoreConfig } from "./redis";
+
+export { readStoreConfig };
 
 /**
  * Registro persistente de las alertas enviadas por el cron — la base de la
  * pantalla "Alertas" de Medios (trazabilidad y moderación).
  *
  * Almacenamiento: Redis de Upstash (Vercel → Storage → Upstash Redis), vía su
- * API REST con fetch: sin dependencias nuevas. Al conectar la base al proyecto,
- * Vercel agrega solas las variables (se aceptan los dos juegos de nombres):
- *   KV_REST_API_URL + KV_REST_API_TOKEN   o   UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+ * API REST (cliente en lib/redis.ts, compartido con el registro de usuarios).
  *
  * Claves (todas con prefijo `pulso:alerts:` por si la base se comparte):
  *   run:<runId>        JSON de RunRecord
@@ -33,40 +34,7 @@ export const MAX_ALERTS_LISTED = 500;
 export const MAX_RUNS_LISTED = 60;
 const MAX_HISTORY = 50;
 
-interface StoreConfig {
-  url: string;
-  token: string;
-}
-
-export function readStoreConfig(): StoreConfig | null {
-  const url = (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "").trim();
-  const token = (process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "").trim();
-  if (!url || !token || !url.startsWith("https://")) return null;
-  return { url: url.replace(/\/+$/, ""), token };
-}
-
-type Cmd = Array<string | number>;
-
-async function pipeline(cfg: StoreConfig, commands: Cmd[]): Promise<any[]> {
-  let res: Response;
-  try {
-    res = await fetch(`${cfg.url}/pipeline`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(commands),
-      signal: AbortSignal.timeout(10000),
-      cache: "no-store",
-    });
-  } catch (err: any) {
-    throw new Error(`No se pudo contactar al almacenamiento de alertas: ${String(err?.message || err).slice(0, 150)}`);
-  }
-  if (!res.ok) throw new Error(`El almacenamiento de alertas respondió HTTP ${res.status}.`);
-  const out = await res.json().catch(() => null);
-  if (!Array.isArray(out)) throw new Error("Respuesta inesperada del almacenamiento de alertas.");
-  const failed = out.find((r) => r && r.error);
-  if (failed) throw new Error(`Almacenamiento de alertas: ${String(failed.error).slice(0, 150)}`);
-  return out.map((r) => r?.result);
-}
+const pipeline = (cfg: StoreConfig, commands: Cmd[]) => redisPipeline(cfg, commands, "almacenamiento de alertas");
 
 const parse = <T>(raw: unknown): T | null => {
   if (typeof raw !== "string") return null;

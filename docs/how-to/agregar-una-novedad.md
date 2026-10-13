@@ -28,7 +28,7 @@ Agregá un objeto **arriba de todo** en `NOVEDADES`:
 
 El puntito con el número cuenta las novedades **más nuevas que la última que esa persona vio**. Al abrir la campanita se marcan como vistas y el puntito se apaga; dentro del panel, las que eran nuevas se resaltan con "Sin ver" hasta que se cierra.
 
-⚠️ Lo visto se recuerda **en cada navegador** (no por usuario), porque Pulso todavía no tiene login. En otro navegador o en una ventana privada, vuelve a aparecer todo como nuevo. Con el login (próximo sprint) se puede guardar por persona.
+⚠️ Lo visto se recuerda **en cada navegador** (no por usuario). En otro navegador o en una ventana privada, vuelve a aparecer todo como nuevo. Ahora que hay login con SSO, se podría guardar por persona.
 
 ## Qué se verifica
 
