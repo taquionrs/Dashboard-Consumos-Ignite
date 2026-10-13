@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import SessionLinks from "./SessionLinks";
+import { PageHeader } from "./PageChrome";
 import { fetchJson } from "@/lib/clientFetch";
 import { PAGES, PROFILES, type PageKey, type Session } from "@/lib/access";
 import type { AuditEntry, UserRecord } from "@/lib/users";
@@ -113,19 +113,7 @@ export default function UsuariosView({ session }: { session: Session }) {
 
   return (
     <div className="wrap">
-      <header className="top">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
-          <div>
-            <h1>Pulso Ignite — Usuarios</h1>
-            <div className="sub">Quién entra a Pulso y a qué páginas — solo administradores</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <SessionLinks session={session} current="usuarios" />
-        </div>
-      </header>
+      <PageHeader title="Pulso Ignite — Usuarios" sub="Quién entra a Pulso y a qué páginas — solo administradores" session={session} current="usuarios" />
 
       {error && (
         <div className="mock-note">

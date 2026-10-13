@@ -1,10 +1,10 @@
 "use client";
 
 import { fetchJson } from "@/lib/clientFetch";
-import NovedadesBell from "./NovedadesBell";
-import SessionLinks from "./SessionLinks";
-import MediosNav from "./MediosNav";
+import { MediosHeader, MediosSubnav } from "./PageChrome";
 import type { Session } from "@/lib/access";
+import { ErrorPanel, LoadingPanel, announceReady, type SourceStatus } from "./StatusUI";
+import { usePlatformSelection } from "@/lib/usePlatformSelection";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
@@ -112,23 +112,19 @@ function dailyVsCurrentPct(daily: number, spend: number, today: number): number 
 type MergedRow = CampaignRow & { platform: PlatformKey };
 
 export default function MediosView({ session }: { session: Session }) {
-  // Antes era selección única (un solo booleano `platform`) — a pedido
-  // explícito 2026-09-25 pasa a multi-selección, para poder tener varias
-  // plataformas prendidas a la vez sin que una apague a la otra. Arranca
-  // solo con Google Ads activo, igual que el default anterior; el resto se
-  // prende a mano.
-  // Partial: PlatformKey incluye "linkedin" (usado en Finanzas), que no
-  // existe en el PLATFORMS de esta vista — no hace falta una entrada para él.
-  const [platformsEnabled, setPlatformsEnabled] = useState<Partial<Record<PlatformKey, boolean>>>({
-    google: true,
-  });
+  // Plataformas: la elección es la MISMA en todas las pantallas (se recuerda en el navegador) y por
+  // defecto están todas prendidas; cada persona apaga las que no quiere ver. Ver lib/usePlatformSelection.ts.
+  const { selection: platformsEnabled, toggle: togglePlatform, ready: selectionReady } = usePlatformSelection(PLATFORMS.map((p) => p.key));
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  // Un fetch por plataforma activa — se combinan en una sola tabla más abajo.
+  // Un fetch por plataforma activa — se combinan en una sola tabla más abajo. Cada una se carga,
+  // y puede fallar, por separado: si falla una, las otras se siguen mostrando.
   const [dataByPlatform, setDataByPlatform] = useState<Partial<Record<PlatformKey, CampaignsResponse>>>({});
-  const [error, setError] = useState<string | null>(null);
+  const [statusByPlatform, setStatusByPlatform] = useState<Partial<Record<PlatformKey, "loading" | "done" | "error">>>({});
+  const [errorByPlatform, setErrorByPlatform] = useState<Partial<Record<PlatformKey, string>>>({});
+  const [reloadKey, setReloadKey] = useState(0);
   // Mismo filtro que Finanzas (Dashboard.tsx) — acá por campaña en vez de
   // por cuenta: oculta campañas sin gasto real en el período elegido.
   // Activado por defecto (a pedido explícito 2026-09-24), en los 2
@@ -156,27 +152,41 @@ export default function MediosView({ session }: { session: Session }) {
   }, [dateMenuOpen]);
 
   useEffect(() => {
-    setError(null);
-    setDataByPlatform({});
+    if (!selectionReady) return;
+    let cancelled = false;
     // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
     // sigue pidiendo "month" hasta que se implemente el rango personalizado.
     const range = datePreset === "custom" ? "month" : datePreset;
     const keys = enabledKeysDep.split(",").filter(Boolean) as PlatformKey[];
-    Promise.all(
-      keys.map((key) =>
-        fetchJson<any>(`/api/campaigns?platform=${key}&range=${range}`)
-          .then((body: CampaignsResponse) => [key, body] as const)
-      )
-    )
-      .then((results) => {
-        const next: Partial<Record<PlatformKey, CampaignsResponse>> = {};
-        results.forEach(([key, body]) => {
-          next[key] = body;
+    const startedAt = Date.now();
+    setDataByPlatform({});
+    setErrorByPlatform({});
+    setStatusByPlatform(Object.fromEntries(keys.map((k) => [k, "loading"])));
+    let pending = keys.length;
+    let anyOk = false;
+    keys.forEach((key) => {
+      fetchJson<any>(`/api/campaigns?platform=${key}&range=${range}`)
+        .then((body: CampaignsResponse) => {
+          if (cancelled) return;
+          anyOk = true;
+          setDataByPlatform((prev) => ({ ...prev, [key]: body }));
+          setStatusByPlatform((prev) => ({ ...prev, [key]: "done" }));
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setErrorByPlatform((prev) => ({ ...prev, [key]: String(err?.message || err) }));
+          setStatusByPlatform((prev) => ({ ...prev, [key]: "error" }));
+        })
+        .finally(() => {
+          if (cancelled) return;
+          pending -= 1;
+          if (pending === 0 && anyOk) announceReady("Campañas cargadas", startedAt);
         });
-        setDataByPlatform(next);
-      })
-      .catch((err) => setError(String(err?.message || err)));
-  }, [enabledKeysDep, datePreset]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectionReady, enabledKeysDep, datePreset, reloadKey]);
 
   // Qué cuentas existen depende de las plataformas activas y el rango — si
   // cambia cualquiera de los dos, la cuenta elegida puede dejar de existir.
@@ -184,37 +194,15 @@ export default function MediosView({ session }: { session: Session }) {
     setAccountKey("all");
   }, [enabledKeysDep, datePreset]);
 
-  function togglePlatform(key: PlatformKey) {
-    // No se puede apagar la última plataforma activa — siempre tiene que
-    // quedar al menos una, si no la tabla queda sin sentido.
-    if (platformsEnabled[key] && enabledKeys.length === 1) return;
-    setPlatformsEnabled((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
-
-  if (error) {
-    return (
-      <div className="wrap">
-        <div className="loading-state">
-          No se pudo cargar /api/campaigns: {error}{" "}
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
-          >
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
-  const loaded = enabledKeys.length > 0 && enabledKeys.every((k) => dataByPlatform[k]);
-  if (!loaded) {
-    return (
-      <div className="wrap">
-        <div className="loading-state">Cargando campañas…</div>
-      </div>
-    );
-  }
+  const loading = !selectionReady || enabledKeys.some((k) => (statusByPlatform[k] ?? "loading") === "loading");
+  const failedKeys = enabledKeys.filter((k) => statusByPlatform[k] === "error");
+  const loaded = !loading && enabledKeys.some((k) => statusByPlatform[k] === "done");
+  const allFailed = !loading && !loaded;
+  const sources: SourceStatus[] = enabledKeys.map((k) => ({
+    label: PLATFORMS.find((p) => p.key === k)?.label ?? k,
+    state: (statusByPlatform[k] ?? "loading") as SourceStatus["state"],
+  }));
+  const failedDetail = failedKeys.map((k) => `${PLATFORMS.find((p) => p.key === k)?.label ?? k}: ${errorByPlatform[k]}`).join(" | ");
 
   const showCombined = enabledKeys.length > 1;
   const singlePlatform = !showCombined ? enabledKeys[0] : undefined;
@@ -255,22 +243,8 @@ export default function MediosView({ session }: { session: Session }) {
 
   return (
     <div className="wrap">
-      <header className="top">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
-          <div>
-            <h1>Pulso Ignite — Medios</h1>
-            <div className="sub">Rendimiento por campaña — equipo Medios, Taquión</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <SessionLinks session={session} current="medios" />
-          <NovedadesBell />
-        </div>
-      </header>
-
-      <MediosNav session={session} current="campanas" />
+      <MediosHeader sub="Rendimiento por campaña — equipo Medios, Taquión" session={session} />
+      <MediosSubnav current="/medios" session={session} />
 
       {mergedWarnings.map((w, i) => (
         <div className="mock-note" key={i}>
@@ -339,11 +313,11 @@ export default function MediosView({ session }: { session: Session }) {
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total proyectado</span>
-            <span className="stat-value num">{fmtMoney(totalBudget)}</span>
+            <span className="stat-value num">{loaded ? fmtMoney(totalBudget) : "…"}</span>
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total gastado</span>
-            <span className="stat-value num">{fmtMoney(totalSpend)}</span>
+            <span className="stat-value num">{loaded ? fmtMoney(totalSpend) : "…"}</span>
           </div>
           <button className="toggle-chip" aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
             <span className="toggle-track">
@@ -362,6 +336,13 @@ export default function MediosView({ session }: { session: Session }) {
         </div>
       </div>
 
+      {loading && <LoadingPanel what="las campañas" sources={sources} />}
+      {allFailed && <ErrorPanel what="Campañas" detail={failedDetail} onRetry={() => setReloadKey((k) => k + 1)} />}
+      {loaded && failedKeys.length > 0 && (
+        <ErrorPanel compact what={`las campañas de ${failedKeys.map((k) => PLATFORMS.find((p) => p.key === k)?.label ?? k).join(" y ")}`} detail={failedDetail} onRetry={() => setReloadKey((k) => k + 1)} />
+      )}
+
+      {loaded && (
       <div className="op-layout">
         <div className="card sidebar">
           <div className="eyebrow">Cuentas</div>
@@ -530,6 +511,7 @@ export default function MediosView({ session }: { session: Session }) {
         </div>
         </div>
       </div>
+      )}
 
       <footer className="foot">
         <span>Fuente de datos: {allMock ? "mock" : "Windsor.ai (en vivo)"}</span>

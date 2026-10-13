@@ -1,9 +1,10 @@
 "use client";
 
 import { fetchJson } from "@/lib/clientFetch";
-import NovedadesBell from "./NovedadesBell";
-import SessionLinks from "./SessionLinks";
+import { PageHeader } from "./PageChrome";
 import type { Session } from "@/lib/access";
+import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
+import { usePlatformSelection } from "@/lib/usePlatformSelection";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientData, FinanceCampaignRow, PlatformKey, SpendResponse } from "@/lib/types";
 
@@ -148,12 +149,10 @@ export default function Dashboard({ session }: { session: Session }) {
   const [data, setData] = useState<SpendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientKey, setClientKey] = useState<string>("all");
-  const [enabled, setEnabled] = useState<Record<PlatformKey, boolean>>({
-    meta: true,
-    google: true,
-    linkedin: true,
-    tiktok: true,
-  });
+  // Plataformas: la elección es la MISMA en todas las pantallas (se recuerda en el navegador) y por
+  // defecto están todas prendidas. Ver lib/usePlatformSelection.ts.
+  const { selection: enabled, toggle: toggleSelection } = usePlatformSelection(["meta", "google", "linkedin", "tiktok"]);
+  const [reloadKey, setReloadKey] = useState(0);
   const [view, setView] = useState<"chart" | "table">("chart");
   const [chartOpen, setChartOpen] = useState(false);
   const [compareOn, setCompareOn] = useState(false);
@@ -198,13 +197,28 @@ export default function Dashboard({ session }: { session: Session }) {
   }, [dateMenuOpen]);
 
   useEffect(() => {
+    let cancelled = false;
+    const startedAt = Date.now();
+    // Al cambiar de período se vuelve a la pantalla de carga: antes quedaban los números del
+    // período anterior como si fueran los del nuevo.
+    setData(null);
+    setError(null);
     // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
     // sigue pidiendo "month" hasta que se implemente el rango personalizado.
     const range = datePreset === "custom" ? "month" : datePreset;
     fetchJson<any>(`/api/spend?range=${range}`)
-      .then((body: SpendResponse) => setData(body))
-      .catch((err) => setError(String(err?.message || err)));
-  }, [datePreset]);
+      .then((body: SpendResponse) => {
+        if (cancelled) return;
+        setData(body);
+        announceReady("Consumo cargado", startedAt);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err?.message || err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [datePreset, reloadKey]);
 
   // Total presupuesto manual — un solo valor para todo el dashboard, no
   // depende de datePreset (ver la nota de manualBudget más arriba). Se
@@ -266,26 +280,20 @@ export default function Dashboard({ session }: { session: Session }) {
     return computeSeries(clientsIncluded, data.today, data.daysInMonth, enabled);
   }, [data, clientsIncluded, enabled]);
 
+  const financeHeader = <PageHeader title="Pulso Ignite" sub="Consumo de pauta multi-cliente — equipo Ignite, Taquión" session={session} current="finanzas" />;
   if (error) {
     return (
       <div className="wrap">
-        <div className="loading-state">
-          No se pudo cargar /api/spend: {error}{" "}
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
-          >
-            Reintentar
-          </button>
-        </div>
+        {financeHeader}
+        <ErrorPanel what="Finanzas (consumo por cliente)" detail={error} onRetry={() => setReloadKey((k) => k + 1)} />
       </div>
     );
   }
   if (!data || !series) {
     return (
       <div className="wrap">
-        <div className="loading-state">Cargando Pulso Ignite…</div>
+        {financeHeader}
+        <LoadingPanel what="el consumo de cada cliente" />
       </div>
     );
   }
@@ -320,9 +328,7 @@ export default function Dashboard({ session }: { session: Session }) {
   const insightWord = ratioForInsight > 1.1 ? "por encima" : ratioForInsight < 0.85 ? "por debajo" : "alineado con";
 
   function togglePlatform(key: PlatformKey) {
-    const enabledCount = PLATFORMS.filter((p) => enabled[p.key]).length;
-    if (enabled[key] && enabledCount === 1) return;
-    setEnabled((prev) => ({ ...prev, [key]: !prev[key] }));
+    toggleSelection(key); // la última plataforma prendida no se apaga (lo resuelve el hook)
   }
 
   function onSvgMouseMove(evt: React.MouseEvent<SVGSVGElement>) {
@@ -472,26 +478,17 @@ export default function Dashboard({ session }: { session: Session }) {
         </div>
       ))}
 
-      <header className="top">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
-          <div>
-            <h1>Pulso Ignite</h1>
-            <div className="sub">Consumo de pauta multi-cliente — equipo Ignite, Taquión</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <div style={{ textAlign: "right" }}>
+      <PageHeader
+        title="Pulso Ignite"
+        sub="Consumo de pauta multi-cliente — equipo Ignite, Taquión"
+        session={session} current="finanzas"
+        extra={
           <div className="num" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
             Día <b style={{ color: "var(--text-primary)" }}>{today}</b> de {daysInMonth} · ritmo ideal{" "}
             <b style={{ color: "var(--text-primary)" }}>{Math.round(idealPct * 1000) / 10}%</b>
           </div>
-        </div>
-          <SessionLinks session={session} current="finanzas" />
-          <NovedadesBell />
-        </div>
-      </header>
+        }
+      />
 
       <div className="controls-row">
         <div className="controls-left">

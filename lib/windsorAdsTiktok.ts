@@ -1,6 +1,5 @@
 import type { AdRow } from "./types";
 import { fetchWindsorRows, reasonMessage, type FetchAdsOptions } from "./windsorFetch";
-import { NON_CRITICAL } from "./cache";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
@@ -142,10 +141,12 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: Fet
     }
   }
 
-  // Seguidores por anuncio — no crítico (ver FOLLOWERS_FIELDS).
+  // Seguidores por anuncio. Si la capa falla, el resultado se considera incompleto: no se guarda en
+  // la caché como bueno y la pantalla avisa (antes quedaba sin la métrica, en silencio, hasta 6 horas).
+  const followersLoaded = !opts.skipFollowers && followersRes.status === "fulfilled";
   if (followersRes.status === "rejected") {
     warnings.push(
-      `Windsor.ai (TikTok Ads, anuncios) ${NON_CRITICAL}: los seguidores por anuncio no están disponibles, esa métrica queda sin datos. Detalle: ${reasonMessage(followersRes)}`
+      `Windsor.ai (TikTok Ads, anuncios): falló la consulta de seguidores por anuncio, esa métrica no se muestra por ahora. Detalle: ${reasonMessage(followersRes)}`
     );
   } else {
     for (const row of followersRes.value) {
@@ -178,7 +179,9 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: Fet
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,
       conversions: acc.conversions,
       thumbnailUrl: acc.thumbnailUrl,
-      followers: acc.hasFollowers ? acc.followers : undefined,
+      // Capa OK: un anuncio sin fila de seguidores ganó 0 (Windsor omite las filas en cero).
+      // Capa caída u omitida: sin dato (la pantalla avisa), nunca un 0 inventado.
+      followers: followersLoaded ? acc.followers : undefined,
     }));
 
   return { ads, warnings };

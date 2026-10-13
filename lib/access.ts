@@ -40,10 +40,13 @@ export const USERS_PATH = "/usuarios";
 const USERS_API = "/api/users";
 
 /**
- * Única ruta sin SSO: la llama el cron, no una persona. Sigue protegida por
- * `Authorization: Bearer <CRON_SECRET>` (ver app/api/cron/notify/route.ts).
+ * Únicas rutas sin SSO: las llama un cron de vercel.json, no una persona, y
+ * cada una se protege sola con `Authorization: Bearer <CRON_SECRET>` (ver
+ * app/api/cron/notify/route.ts). Lista explícita a propósito: una ruta de cron
+ * o de calentamiento nueva se suma acá y TIENE que exigir CRON_SECRET; nada
+ * queda abierto por estar bajo /api/cron/.
  */
-export const CRON_PATH = "/api/cron/notify";
+export const CRON_PATHS = ["/api/cron/notify"];
 /** Login, vuelta del login y salida: tienen que poder abrirse sin sesión. */
 export const AUTH_PREFIX = "/auth/";
 

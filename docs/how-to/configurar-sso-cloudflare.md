@@ -123,3 +123,12 @@ Todo se hace desde **Pulso → Usuarios** (`/usuarios`), visible solo para admin
 ## Agregar una página o una ruta nueva
 
 Las páginas y sus rutas de datos están en `PAGES`, en [`lib/access.ts`](../../lib/access.ts). Una ruta `/api/*` que no figure ahí responde **403 a todos**, para que ninguna ruta nueva quede expuesta por olvido. Al crear una ruta, sumala a `apis` de la página que la usa. Si es una pantalla nueva, agregala a `PAGES`, y aparece sola en `/usuarios`.
+
+### Rutas de cron o de calentamiento
+
+Las únicas rutas que no pasan por el login son las de `CRON_PATHS`, en [`lib/access.ts`](../../lib/access.ts) (hoy solo `/api/cron/notify`). Para agregar una ruta que llame un cron de `vercel.json` (por ejemplo, una de calentamiento antes del resumen):
+
+1. Crearla y hacer que exija `Authorization: Bearer <CRON_SECRET>`, igual que [`app/api/cron/notify/route.ts`](../../app/api/cron/notify/route.ts). Sin la variable configurada tiene que responder 503, nunca abrirse.
+2. Sumarla a `CRON_PATHS`.
+
+Es una lista explícita a propósito: una ruta nueva bajo `/api/cron/` no queda abierta por estar ahí.

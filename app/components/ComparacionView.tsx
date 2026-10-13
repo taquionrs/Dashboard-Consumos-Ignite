@@ -1,10 +1,9 @@
 "use client";
 
 import { fetchJson } from "@/lib/clientFetch";
-import NovedadesBell from "./NovedadesBell";
-import SessionLinks from "./SessionLinks";
-import MediosNav from "./MediosNav";
+import { MediosHeader, MediosSubnav } from "./PageChrome";
 import type { Session } from "@/lib/access";
+import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
 import { useEffect, useRef, useState } from "react";
 import type { PlatformComparisonResponse, PlatformKey } from "@/lib/types";
 
@@ -40,6 +39,7 @@ export default function ComparacionView({ session }: { session: Session }) {
   const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<PlatformComparisonResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,68 +54,44 @@ export default function ComparacionView({ session }: { session: Session }) {
   }, [dateMenuOpen]);
 
   useEffect(() => {
+    let cancelled = false;
+    const startedAt = Date.now();
     setData(null);
+    setError(null);
     const range = datePreset === "custom" ? "month" : datePreset;
     fetchJson<any>(`/api/platform-comparison?range=${range}`)
-      .then((body: PlatformComparisonResponse) => setData(body))
-      .catch((err) => setError(String(err?.message || err)));
-  }, [datePreset]);
+      .then((body: PlatformComparisonResponse) => {
+        if (cancelled) return;
+        setData(body);
+        announceReady("Comparación cargada", startedAt);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err?.message || err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [datePreset, reloadKey]);
 
-  if (error) {
-    return (
-      <div className="wrap">
-        <div className="loading-state">
-          No se pudo cargar /api/platform-comparison: {error}{" "}
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
-          >
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (!data) {
-    return (
-      <div className="wrap">
-        <div className="loading-state">Cargando comparación…</div>
-      </div>
-    );
-  }
-
+  const loading = !data && !error;
+  const platforms = data?.platforms ?? [];
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
-  const platformsWithCpl = data.platforms.filter((p) => p.cpl > 0);
+  const platformsWithCpl = platforms.filter((p) => p.cpl > 0);
   const maxCpl = Math.max(1, ...platformsWithCpl.map((p) => p.cpl));
   const cheapest = platformsWithCpl.length > 1 ? [...platformsWithCpl].sort((a, b) => a.cpl - b.cpl)[0] : undefined;
   const priciest = platformsWithCpl.length > 1 ? [...platformsWithCpl].sort((a, b) => b.cpl - a.cpl)[0] : undefined;
 
   return (
     <div className="wrap">
-      <header className="top">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
-          <div>
-            <h1>Pulso Ignite — Medios</h1>
-            <div className="sub">¿Dónde está rindiendo mejor la inversión? — equipo Medios, Taquión</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <SessionLinks session={session} current="medios" />
-          <NovedadesBell />
-        </div>
-      </header>
+      <MediosHeader sub="¿Dónde está rindiendo mejor la inversión? — equipo Medios, Taquión" session={session} />
+      <MediosSubnav current="/medios/comparacion" session={session} />
 
-      <MediosNav session={session} current="comparacion" />
-
-      {data.warnings?.map((w, i) => (
+      {data?.warnings?.map((w, i) => (
         <div className="mock-note" key={i}>
           <span className="tq-arrow" style={{ color: "var(--status-warning)" }}>↘</span> <span>{w}</span>
         </div>
       ))}
-      {data.source === "mock" && !data.warnings && (
+      {data?.source === "mock" && !data.warnings && (
         <div className="mock-note">
           <span className="tq-arrow">↘</span>{" "}
           <span>
@@ -178,6 +154,11 @@ export default function ComparacionView({ session }: { session: Session }) {
         </div>
       </div>
 
+      {loading && <LoadingPanel what="la comparación de plataformas" />}
+      {error && <ErrorPanel what="Comparación de plataformas" detail={error} onRetry={() => setReloadKey((k) => k + 1)} />}
+
+      {data && (
+      <>
       <div className="card">
         <h2>Costo por resultado (CPL), por plataforma</h2>
         <div className="card-sub">Barra más corta = más eficiente. Sin conversiones en el período, la plataforma no entra en el gráfico.</div>
@@ -223,7 +204,7 @@ export default function ComparacionView({ session }: { session: Session }) {
               </tr>
             </thead>
             <tbody>
-              {data.platforms.map((p) => (
+              {platforms.map((p) => (
                 <tr key={p.platformKey}>
                   <td>
                     <span className="plat-dot" style={{ background: `var(${PLATFORM_VAR[p.platformKey] ?? "--accent"})` }} />
@@ -238,9 +219,11 @@ export default function ComparacionView({ session }: { session: Session }) {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       <footer className="foot">
-        <span>Fuente de datos: {data.source === "windsor" ? "Windsor.ai (en vivo)" : "mock"}</span>
+        <span>Fuente de datos: {data?.source === "mock" ? "mock" : "Windsor.ai (en vivo)"}</span>
         <span>Perfil Medios — comparación entre plataformas conectadas</span>
       </footer>
     </div>

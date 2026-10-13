@@ -1,9 +1,8 @@
 "use client";
 
-import NovedadesBell from "./NovedadesBell";
-import SessionLinks from "./SessionLinks";
-import MediosNav from "./MediosNav";
+import { MediosHeader, MediosSubnav } from "./PageChrome";
 import type { Session } from "@/lib/access";
+import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
 import { useEffect, useMemo, useState } from "react";
 import { fetchJson } from "@/lib/clientFetch";
 import { ALERT_TYPE_LABEL, STATUS_LABEL, type AlertRecord, type AlertType, type ModerationStatus, type RunRecord } from "@/lib/alertTypes";
@@ -59,12 +58,26 @@ export default function AlertasView({ session }: { session: Session }) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    const startedAt = Date.now();
+    setData(null);
+    setError(null);
     fetchJson<LogResponse>("/api/alerts")
-      .then(setData)
-      .catch((err) => setError(String(err?.message || err)));
-  }, []);
+      .then((body) => {
+        if (cancelled) return;
+        setData(body);
+        announceReady("Alertas cargadas", startedAt);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err?.message || err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const alerts = data?.alerts ?? [];
   const runs = data?.runs ?? [];
@@ -140,32 +153,11 @@ export default function AlertasView({ session }: { session: Session }) {
 
   return (
     <div className="wrap">
-      <header className="top">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
-          <div>
-            <h1>Pulso Ignite — Medios</h1>
-            <div className="sub">Alertas enviadas: trazabilidad y moderación — equipo Medios, Taquión</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <SessionLinks session={session} current="medios" />
-          <NovedadesBell />
-        </div>
-      </header>
+      <MediosHeader sub="Alertas enviadas: trazabilidad y moderación — equipo Medios, Taquión" session={session} />
+      <MediosSubnav current="/medios/alertas" session={session} />
 
-      <MediosNav session={session} current="alertas" />
-
-      {error && (
-        <div className="loading-state">
-          No se pudo cargar el registro de alertas: {error}{" "}
-          <button type="button" onClick={() => window.location.reload()} style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}>
-            Reintentar
-          </button>
-        </div>
-      )}
-      {!error && !data && <div className="loading-state">Cargando alertas…</div>}
+      {error && <ErrorPanel what="Alertas" detail={error} onRetry={() => setReloadKey((k) => k + 1)} />}
+      {!error && !data && <LoadingPanel what="el registro de alertas" />}
 
       {data && !data.configured && (
         <div className="alerts-setup">

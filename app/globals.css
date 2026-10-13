@@ -493,3 +493,34 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
 @media (max-width: 640px) {
   .novedades-panel { position: fixed; left: 16px; right: 16px; top: 72px; width: auto; max-height: calc(100vh - 96px); }
 }
+
+/* ---------- Estados de pantalla: cargando, error y "Listo" (app/components/StatusUI.tsx) ---------- */
+.status-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 22px 24px; margin: 8px 0 20px; }
+.status-head { display: flex; align-items: center; gap: 16px; }
+.status-title { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.status-detail { font-size: 13.5px; color: var(--text-muted); margin-top: 2px; }
+.status-spinner { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--surface-2); border-top-color: var(--accent); animation: status-spin .9s linear infinite; flex: none; }
+@keyframes status-spin { to { transform: rotate(360deg); } }
+.status-bar { height: 5px; background: var(--surface-2); border-radius: 3px; margin-top: 16px; overflow: hidden; }
+.status-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .6s ease; }
+.status-sources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.status-source { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+.status-source.done { color: var(--status-good); font-weight: 600; }
+.status-source.error { color: var(--status-critical); font-weight: 600; }
+.status-source-state { font-weight: 400; color: var(--text-muted); }
+
+.error-panel { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--status-critical); border-radius: 8px; padding: 22px 24px; margin: 8px 0 20px; max-width: 760px; }
+.error-panel.compact { padding: 14px 18px; margin: 8px 0 14px; max-width: none; }
+.error-title { font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px; }
+.error-panel p { margin: 6px 0; font-size: 14.5px; line-height: 1.5; color: var(--text-secondary); }
+.error-panel a { color: var(--accent); }
+.error-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.btn-primary, .btn-secondary { font: inherit; font-size: 13.5px; font-weight: 600; padding: 8px 16px; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn-primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+.btn-secondary { background: var(--surface); color: var(--text-primary); border: 1px solid var(--border-strong); }
+.error-panel a.btn-secondary { color: var(--text-primary); }
+.error-detail { margin-top: 14px; font-size: 12.5px; color: var(--text-muted); }
+.error-detail code { display: block; margin-top: 6px; padding: 8px 10px; background: var(--surface-2); border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
+
+.ready-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--text-primary); color: var(--surface); padding: 11px 20px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); z-index: 60; animation: ready-in .25s ease; }
+@keyframes ready-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }

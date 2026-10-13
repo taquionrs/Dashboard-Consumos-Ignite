@@ -1,12 +1,15 @@
 "use client";
 
 import { fetchJson } from "@/lib/clientFetch";
-import NovedadesBell from "./NovedadesBell";
-import SessionLinks from "./SessionLinks";
-import MediosNav from "./MediosNav";
+import { MediosHeader, MediosSubnav } from "./PageChrome";
 import type { Session } from "@/lib/access";
+import { ErrorPanel, LoadingPanel, announceReady, type SourceStatus } from "./StatusUI";
+import { usePlatformSelection } from "@/lib/usePlatformSelection";
 import { useEffect, useRef, useState } from "react";
 import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
+
+// Anuncio ya combinado entre plataformas: AdRow + de qué plataforma vino.
+type MergedAd = AdRow & { platform: PlatformKey };
 
 const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "google", label: "Google Ads", varName: "--plat-google" },
@@ -44,7 +47,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "impressions", label: "Más impresiones" },
 ];
 
-function sortAdsBy(ads: AdRow[], sortKey: SortKey): AdRow[] {
+function sortAdsBy(ads: MergedAd[], sortKey: SortKey): MergedAd[] {
   if (sortKey === "default") return ads;
   const arr = [...ads];
   if (sortKey === "ctr") {
@@ -62,7 +65,7 @@ function sortAdsBy(ads: AdRow[], sortKey: SortKey): AdRow[] {
 // anuncio en el grupo (no hay con qué comparar).
 // CPL y Conversiones se ocultaron a pedido del equipo (2026-10-01): el dato
 // sigue en la API, así que volver a ofrecerlos es agregar la fila y el criterio.
-function bestAdInGroup(ads: AdRow[], sortKey: SortKey): { adId: string; label: string } | null {
+function bestAdInGroup(ads: MergedAd[], sortKey: SortKey): { adId: string; label: string } | null {
   if (ads.length < 2) return null;
   const criterion = sortKey === "default" ? "ctr" : sortKey;
   if (criterion === "impressions") {
@@ -80,9 +83,9 @@ interface CampaignGroup {
   key: string;
   campaignName: string;
   accountName: string;
-  ads: AdRow[];
+  ads: MergedAd[];
 }
-function groupByCampaign(ads: AdRow[]): CampaignGroup[] {
+function groupByCampaign(ads: MergedAd[]): CampaignGroup[] {
   const groups: CampaignGroup[] = [];
   const indexByKey = new Map<string, number>();
   ads.forEach((ad) => {
@@ -99,13 +102,18 @@ function groupByCampaign(ads: AdRow[]): CampaignGroup[] {
 }
 
 export default function AnunciosView({ session }: { session: Session }) {
-  const [platform, setPlatform] = useState<PlatformKey>("google");
+  // Plataformas: la elección es la MISMA en todas las pantallas (se recuerda en el navegador) y por
+  // defecto están todas prendidas; cada persona apaga las que no quiere ver. Ver lib/usePlatformSelection.ts.
+  const { selection: platformsEnabled, toggle: togglePlatform, ready: selectionReady } = usePlatformSelection(PLATFORMS.map((p) => p.key));
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [data, setData] = useState<AdsResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Un fetch por plataforma activa: cada una se carga, y puede fallar, por separado.
+  const [dataByPlatform, setDataByPlatform] = useState<Partial<Record<PlatformKey, AdsResponse>>>({});
+  const [statusByPlatform, setStatusByPlatform] = useState<Partial<Record<PlatformKey, "loading" | "done" | "error">>>({});
+  const [errorByPlatform, setErrorByPlatform] = useState<Partial<Record<PlatformKey, string>>>({});
+  const [reloadKey, setReloadKey] = useState(0);
   // Mismo filtro "Solo con actividad" que ya tienen Finanzas y Campañas
   // (MediosView.tsx), acá por anuncio. AdRow no trae "spend" (no se expone
   // a nivel anuncio, ver lib/windsorAds.ts), así que el criterio de
@@ -133,6 +141,9 @@ export default function AnunciosView({ session }: { session: Session }) {
   const [lightboxAd, setLightboxAd] = useState<AdRow | null>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
+  const enabledKeys = PLATFORMS.filter((p) => platformsEnabled[p.key]).map((p) => p.key);
+  const enabledKeysDep = enabledKeys.join(",");
+
   useEffect(() => {
     if (!dateMenuOpen) return;
     function onClickOutside(e: MouseEvent) {
@@ -148,7 +159,7 @@ export default function AnunciosView({ session }: { session: Session }) {
   // cambia cualquiera de los dos, la cuenta elegida puede dejar de existir.
   useEffect(() => {
     setAccountKey("all");
-  }, [platform, datePreset]);
+  }, [enabledKeysDep, datePreset]);
 
   // Cierra el lightbox con Escape — patrón estándar de modal.
   useEffect(() => {
@@ -161,80 +172,79 @@ export default function AnunciosView({ session }: { session: Session }) {
   }, [lightboxAd]);
 
   useEffect(() => {
-    setData(null);
-    setError(null);
+    if (!selectionReady) return;
     setBrokenThumbs(new Set());
     const range = datePreset === "custom" ? "month" : datePreset;
+    const keys = enabledKeysDep.split(",").filter(Boolean) as PlatformKey[];
+    const startedAt = Date.now();
+    setDataByPlatform({});
+    setErrorByPlatform({});
+    setStatusByPlatform(Object.fromEntries(keys.map((k) => [k, "loading"])));
     // Timeout del lado del cliente (35s, por encima del maxDuration de 30s de la ruta) — verificado en vivo 2026-09-21: la
-    // consulta de anuncios de Meta se quedó colgada en "Cargando
-    // anuncios…" indefinidamente. El fetch server-side ya tiene su propio
-    // timeout (ver lib/windsorAdsMeta.ts), pero esto asegura que la UI
-    // nunca se quede esperando para siempre pase lo que pase del otro lado.
+    // consulta de anuncios de Meta se quedó colgada indefinidamente. El fetch server-side ya tiene su propio
+    // timeout (ver lib/windsorAdsMeta.ts), pero esto asegura que la UI nunca se quede esperando para siempre.
     const controller = new AbortController();
-    // Distingue el abort del timeout del abort por cleanup (cambio de
-    // plataforma/fecha antes de que responda la anterior) — solo el primero
-    // es un error real que vale la pena mostrarle al usuario.
+    let cancelled = false;
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, 35000);
-    fetchJson<any>(`/api/ads?platform=${platform}&range=${range}`, { signal: controller.signal })
-      .then((body: AdsResponse) => setData(body))
-      .catch((err) => {
-        if (err?.name === "AbortError") {
-          if (timedOut) setError("La consulta tardó demasiado (más de 35s) y se canceló. Probá de nuevo.");
-        } else {
-          setError(String(err?.message || err));
-        }
-      })
-      .finally(() => clearTimeout(timeout));
-    return () => controller.abort();
-  }, [platform, datePreset]);
+    }, 60000);
+    let pending = keys.length;
+    let anyOk = false;
+    keys.forEach((key) => {
+      fetchJson<any>(`/api/ads?platform=${key}&range=${range}`, { signal: controller.signal })
+        .then((body: AdsResponse) => {
+          if (cancelled) return;
+          anyOk = true;
+          setDataByPlatform((prev) => ({ ...prev, [key]: body }));
+          setStatusByPlatform((prev) => ({ ...prev, [key]: "done" }));
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          const msg = err?.name === "AbortError" ? (timedOut ? "La consulta tardó demasiado (más de 60 s) y se canceló." : "") : String(err?.message || err);
+          if (!msg) return;
+          setErrorByPlatform((prev) => ({ ...prev, [key]: msg }));
+          setStatusByPlatform((prev) => ({ ...prev, [key]: "error" }));
+        })
+        .finally(() => {
+          if (cancelled) return;
+          pending -= 1;
+          if (pending === 0) clearTimeout(timeout);
+          if (pending === 0 && anyOk) announceReady("Anuncios cargados", startedAt);
+        });
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [selectionReady, enabledKeysDep, datePreset, reloadKey]);
 
-  if (error) {
-    return (
-      <div className="wrap">
-        <div className="loading-state">
-          No se pudo cargar /api/ads: {error}{" "}
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
-          >
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (!data) {
-    return (
-      <div className="wrap">
-        <div className="loading-state">Cargando anuncios…</div>
-        <div className="ad-grid" aria-hidden="true">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div className="ad-card ad-skeleton" key={i}>
-              <div className="ad-thumb ad-skeleton-block" />
-              <div className="ad-body">
-                <div className="ad-skeleton-block ad-skeleton-line" />
-                {Array.from({ length: 4 }).map((_, j) => (
-                  <div className="ad-skeleton-block ad-skeleton-row" key={j} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const loading = !selectionReady || enabledKeys.some((k) => (statusByPlatform[k] ?? "loading") === "loading");
+  const failedKeys = enabledKeys.filter((k) => statusByPlatform[k] === "error");
+  const loaded = !loading && enabledKeys.some((k) => statusByPlatform[k] === "done");
+  const allFailed = !loading && !loaded;
+  const sources: SourceStatus[] = enabledKeys.map((k) => ({
+    label: PLATFORMS.find((p) => p.key === k)?.label ?? k,
+    state: (statusByPlatform[k] ?? "loading") as SourceStatus["state"],
+  }));
+  const failedDetail = failedKeys.map((k) => `${PLATFORMS.find((p) => p.key === k)?.label ?? k}: ${errorByPlatform[k]}`).join(" | ");
 
-  const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
+  const activeLabel = enabledKeys.map((k) => PLATFORMS.find((p) => p.key === k)?.label ?? k).join(" + ");
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
+  const platformLabelOf = (k: PlatformKey) => PLATFORMS.find((p) => p.key === k)?.label ?? k;
+
+  const allAds: MergedAd[] = [];
+  enabledKeys.forEach((k) => {
+    dataByPlatform[k]?.ads.forEach((ad) => allAds.push({ ...ad, platform: k }));
+  });
+  const allMock = enabledKeys.length > 0 && enabledKeys.every((k) => dataByPlatform[k]?.source === "mock");
+  const mergedWarnings = [...new Set(enabledKeys.flatMap((k) => dataByPlatform[k]?.warnings ?? []))];
 
   // "Actividad" = impresiones reales > 0 (ver nota de onlyActive más
   // arriba). Alimenta el sidebar de cuentas y la grilla.
-  const activeAds = onlyActive ? data.ads.filter((ad) => ad.impressions > 0) : data.ads;
+  const activeAds = onlyActive ? allAds.filter((ad) => ad.impressions > 0) : allAds;
 
   // Cuentas para el sidebar, a partir de los anuncios ya filtrados por
   // actividad (sin duplicar por anuncio).
@@ -266,29 +276,15 @@ export default function AnunciosView({ session }: { session: Session }) {
 
   return (
     <div className="wrap">
-      <header className="top">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
-          <div>
-            <h1>Pulso Ignite — Medios</h1>
-            <div className="sub">Rendimiento por campaña — equipo Medios, Taquión</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <SessionLinks session={session} current="medios" />
-          <NovedadesBell />
-        </div>
-      </header>
+      <MediosHeader sub="Rendimiento por campaña — equipo Medios, Taquión" session={session} />
+      <MediosSubnav current="/medios/anuncios" session={session} />
 
-      <MediosNav session={session} current="anuncios" />
-
-      {data.warnings?.map((w, i) => (
+      {mergedWarnings.map((w, i) => (
         <div className="mock-note" key={i}>
           <span className="tq-arrow" style={{ color: "var(--status-warning)" }}>↘</span> <span>{w}</span>
         </div>
       ))}
-      {data.source === "mock" && !data.warnings && (
+      {allMock && mergedWarnings.length === 0 && (
         <div className="mock-note">
           <span className="tq-arrow">↘</span>{" "}
           <span>
@@ -364,7 +360,7 @@ export default function AnunciosView({ session }: { session: Session }) {
         </div>
         <div className="chip-row">
           {PLATFORMS.map((p) => (
-            <button key={p.key} className="chip plat" aria-pressed={platform === p.key} onClick={() => setPlatform(p.key)}>
+            <button key={p.key} className="chip plat" aria-pressed={!!platformsEnabled[p.key]} onClick={() => togglePlatform(p.key)}>
               <span className="dot" style={{ background: `var(${p.varName})` }} />
               {p.label}
             </button>
@@ -372,6 +368,29 @@ export default function AnunciosView({ session }: { session: Session }) {
         </div>
       </div>
 
+      {loading && (
+        <LoadingPanel what="los anuncios" sources={sources}>
+          <div className="ad-grid" aria-hidden="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div className="ad-card ad-skeleton" key={i}>
+                <div className="ad-thumb ad-skeleton-block" />
+                <div className="ad-body">
+                  <div className="ad-skeleton-block ad-skeleton-line" />
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <div className="ad-skeleton-block ad-skeleton-row" key={j} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </LoadingPanel>
+      )}
+      {allFailed && <ErrorPanel what="Anuncios" detail={failedDetail} onRetry={() => setReloadKey((k) => k + 1)} />}
+      {loaded && failedKeys.length > 0 && (
+        <ErrorPanel compact what={`los anuncios de ${failedKeys.map(platformLabelOf).join(" y ")}`} detail={failedDetail} onRetry={() => setReloadKey((k) => k + 1)} />
+      )}
+
+      {loaded && (
       <div className="op-layout">
         <div className="card sidebar">
           <div className="eyebrow">Cuentas</div>
@@ -405,7 +424,7 @@ export default function AnunciosView({ session }: { session: Session }) {
 
           {visibleAds.length === 0 ? (
             <div style={{ color: "var(--text-muted)", marginTop: 14 }}>
-              {data.ads.length === 0 ? "Sin anuncios para mostrar." : "Sin anuncios con los filtros elegidos."}
+              {allAds.length === 0 ? "Sin anuncios para mostrar." : "Sin anuncios con los filtros elegidos."}
             </div>
           ) : (
             campaignGroups.map((g) => {
@@ -449,8 +468,8 @@ export default function AnunciosView({ session }: { session: Session }) {
                                   : undefined
                               }
                               style={
-                                !hasThumb && platform !== "google"
-                                  ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
+                                !hasThumb && ad.platform !== "google"
+                                  ? { background: `linear-gradient(135deg, var(--plat-${ad.platform}), color-mix(in srgb, var(--plat-${ad.platform}) 55%, #000))` }
                                   : undefined
                               }
                             >
@@ -466,7 +485,7 @@ export default function AnunciosView({ session }: { session: Session }) {
                                   onError={() => setBrokenThumbs((prev) => new Set(prev).add(ad.adId))}
                                 />
                               ) : (
-                                activeLabel
+                                platformLabelOf(ad.platform)
                               )}
                             </div>
                             <div className="ad-body">
@@ -476,8 +495,13 @@ export default function AnunciosView({ session }: { session: Session }) {
                               <div className="ad-metric-row"><span>Gasto</span><span className="num">{fmtMoney(ad.spend)}</span></div>
                               <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
                               <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
-                              {ad.followers !== undefined && (
-                                <div className="ad-metric-row"><span>Seguidores ganados</span><span className="num">{fmtInt(ad.followers)}</span></div>
+                              {(ad.platform === "meta" || ad.platform === "tiktok") && (
+                                <div className="ad-metric-row">
+                                  <span>Seguidores ganados</span>
+                                  <span className="num" title={ad.followers === undefined ? "No se pudo cargar esta métrica. Tocá Reintentar o volvé a abrir la pantalla en unos minutos." : undefined}>
+                                    {ad.followers === undefined ? "—" : fmtInt(ad.followers)}
+                                  </span>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -492,6 +516,7 @@ export default function AnunciosView({ session }: { session: Session }) {
         </div>
         </div>
       </div>
+      )}
 
       {lightboxAd && (
         <div className="ad-lightbox-overlay" onClick={() => setLightboxAd(null)}>
@@ -528,7 +553,7 @@ export default function AnunciosView({ session }: { session: Session }) {
       )}
 
       <footer className="foot">
-        <span>Fuente de datos: {data.source === "windsor" ? "Windsor.ai (en vivo)" : "mock"}</span>
+        <span>Fuente de datos: {allMock ? "mock" : "Windsor.ai (en vivo)"}</span>
       </footer>
     </div>
   );

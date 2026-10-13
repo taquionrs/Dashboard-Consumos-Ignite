@@ -4,7 +4,7 @@ import {
   AUTH_NOT_CONFIGURED,
   AUTH_PREFIX,
   canAccess,
-  CRON_PATH,
+  CRON_PATHS,
   devSession,
   homePath,
   htmlPage,
@@ -20,7 +20,7 @@ import { resolveAccess, UsersError } from "@/lib/users";
 
 /**
  * Login con SSO y permisos por página para TODO Pulso — pantallas y /api/* —
- * salvo /api/cron/notify (la llama el cron; se protege con CRON_SECRET) y
+ * salvo las rutas de cron (CRON_PATHS; se protegen con CRON_SECRET) y
  * /auth/* (el login mismo). Reglas en lib/auth.ts, usuarios en lib/users.ts.
  *
  * - Sin sesión: las pantallas van al login de Cloudflare; /api/* responde 401.
@@ -38,7 +38,7 @@ const LOGOUT_LINK = { href: "/auth/logout", label: "Cerrar sesión y entrar con 
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === CRON_PATH) return NextResponse.next();
+  if (CRON_PATHS.includes(pathname)) return NextResponse.next();
   const isApi = pathname.startsWith("/api/");
 
   // Un solo dominio: la cookie de sesión vive en él y es el que figura como
