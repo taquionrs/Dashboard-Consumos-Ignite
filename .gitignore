@@ -6,3 +6,6 @@ out
 *.log
 .DS_Store
 .vercel
+
+# Cache de compilacion de TypeScript (se regenera sola)
+*.tsbuildinfo
