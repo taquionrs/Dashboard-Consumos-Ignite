@@ -1,3 +1,4 @@
+import { normAccountId } from "./matchKeys";
 import type { AdRow, ClientData, PlatformKey } from "./types";
 import type { MediaPlanTarget } from "./mediaPlan";
 import type { FrequencyRow } from "./windsorFrequency";
@@ -343,7 +344,7 @@ export function nextMonthBlock(
   if (today < daysInPeriod - (T.nextMonthWindowDays - 1)) return null; // todavía falta para fin de mes
   if (!sheet || sheet.warning || sheet.targets.length === 0) return null; // lo cubre el bloque de la hoja
 
-  const nameOf = (cuenta: string, cliente: string) => clients?.find((c) => c.accountId === cuenta)?.name ?? (cliente || cuenta);
+  const nameOf = (cuenta: string, cliente: string) => clients?.find((c) => normAccountId(c.accountId) === normAccountId(cuenta))?.name ?? (cliente || cuenta);
   const expected = new Map<string, string>(); // cuenta -> nombre
   const hasNext = new Set<string>();
   for (const t of sheet.targets) {

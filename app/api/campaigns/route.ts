@@ -3,7 +3,8 @@ import { fetchGoogleAdsCampaigns } from "@/lib/windsorCampaigns";
 import { fetchMetaCampaigns } from "@/lib/windsorMeta";
 import { fetchTiktokCampaigns } from "@/lib/windsorTiktok";
 import { hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey, type ResolvedDateRange } from "@/lib/windsor";
-import { fetchMediaPlanBudgetByCampaign } from "@/lib/mediaPlan";
+import { fetchMediaPlanBudgetByCampaign, type MediaPlanTarget } from "@/lib/mediaPlan";
+import { budgetKey, normAccountId } from "@/lib/matchKeys";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import { MOCK_CAMPAIGNS } from "@/lib/mockCampaigns";
 import { CONNECTED_PLATFORMS } from "@/lib/platforms";
@@ -64,6 +65,25 @@ function notConnectedResponse(platform: PlatformKey, range: ResolvedDateRange): 
   };
 }
 
+/** Texto de aviso por cada fila de la hoja (de esta plataforma) sin campaña correspondiente en Windsor. */
+function unmatchedSheetWarnings(platform: PlatformKey, rows: MediaPlanTarget[], campaigns: CampaignRow[]): string[] {
+  const keys = new Set(campaigns.map((c) => budgetKey(c.accountId, c.campaignName)));
+  const out: string[] = [];
+  for (const t of rows) {
+    if (t.plataforma !== platform || keys.has(budgetKey(t.cuenta, t.campana))) continue;
+    const sameAccount = campaigns.filter((c) => normAccountId(c.accountId) === normAccountId(t.cuenta));
+    const head = `La hoja de proyectados tiene "${t.campana}" (cuenta ${t.cuenta}, ${Math.round(t.presupuesto).toLocaleString("es-AR")}) pero no coincide con ninguna campaña de Windsor.`;
+    if (sameAccount.length === 0) {
+      const accounts = [...new Set(campaigns.map((c) => c.accountId))].slice(0, 6).join(", ");
+      out.push(`${head} Esa cuenta no tiene campañas en Windsor (cuentas que sí: ${accounts || "ninguna"}). Revisá el número de cuenta.`);
+    } else {
+      const names = sameAccount.slice(0, 5).map((c) => `"${c.campaignName}"`).join(", ");
+      out.push(`${head} La cuenta existe, pero ninguna campaña se llama así. Nombres de esa cuenta: ${names}${sameAccount.length > 5 ? "…" : ""}. Copiá el nombre desde Pulso o Ads Manager.`);
+    }
+  }
+  return out;
+}
+
 export async function GET(request: Request) {
   const platform = parsePlatformParam(request);
   const rangeKey = parseRangeParam(request);
@@ -107,13 +127,12 @@ export async function GET(request: Request) {
           fetchMediaPlanBudgetByCampaign(),
         ]);
         if (failed) throw new Error(warnings.join(" | ") || "Windsor.ai no respondió");
-        return {
-          campaigns: campaigns.map((c) => ({
-            ...c,
-            budget: budgets.byCampaign.get(`${c.accountId}:${c.campaignName}`) ?? 0,
-          })),
-          warnings: budgets.warning ? [...warnings, budgets.warning] : warnings,
-        };
+        const withBudget = campaigns.map((c) => ({ ...c, budget: budgets.byCampaign.get(budgetKey(c.accountId, c.campaignName)) ?? 0 }));
+        const allWarnings = budgets.warning ? [...warnings, budgets.warning] : [...warnings];
+        // Filas de la hoja de ESTA plataforma que no cruzaron con ninguna campaña: se avisa cuáles y por qué
+        // (antes quedaban en "Sin objetivo cargado" sin ninguna pista). Solo con "Este mes", que es el mes del presupuesto.
+        if (rangeKey === "month") allWarnings.push(...unmatchedSheetWarnings(platform, budgets.rows, withBudget));
+        return { campaigns: withBudget, warnings: allWarnings };
       },
       isClean: (r) => r.campaigns.length > 0 && !hasDegradedWarning(r.warnings),
       describe: (r) => r.warnings.join(" | "),

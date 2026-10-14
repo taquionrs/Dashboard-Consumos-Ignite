@@ -1,4 +1,5 @@
 import type { PlatformKey } from "./types";
+import { budgetKey, normAccountId } from "./matchKeys";
 
 /**
  * Lee los objetivos de inversión (media plan) desde la "Hoja maestra de
@@ -199,14 +200,16 @@ export async function fetchMediaPlanBudgetByAccount(
   const byAccount = new Map<string, number>();
   const accountsWithCampaignBudget = new Set<string>();
   relevant.forEach((t) => {
+    const acct = normAccountId(t.cuenta);
     if (t.campana) {
-      byAccount.set(t.cuenta, (byAccount.get(t.cuenta) ?? 0) + t.presupuesto);
-      accountsWithCampaignBudget.add(t.cuenta);
+      byAccount.set(acct, (byAccount.get(acct) ?? 0) + t.presupuesto);
+      accountsWithCampaignBudget.add(acct);
     }
   });
   relevant.forEach((t) => {
-    if (!t.campana && !accountsWithCampaignBudget.has(t.cuenta)) {
-      byAccount.set(t.cuenta, t.presupuesto);
+    const acct = normAccountId(t.cuenta);
+    if (!t.campana && !accountsWithCampaignBudget.has(acct)) {
+      byAccount.set(acct, t.presupuesto);
     }
   });
 
@@ -236,17 +239,20 @@ export async function fetchMediaPlanBudgetByAccount(
  */
 export async function fetchMediaPlanBudgetByCampaign(
   now: Date = new Date()
-): Promise<{ byCampaign: Map<string, number>; warning?: string }> {
+): Promise<{ byCampaign: Map<string, number>; rows: MediaPlanTarget[]; warning?: string }> {
   const { targets, warning } = await fetchMediaPlanTargets();
-  if (warning) return { byCampaign: new Map(), warning };
+  if (warning) return { byCampaign: new Map(), rows: [], warning };
 
   const monthKeys = currentMonthKeys(now);
   const byCampaign = new Map<string, number>();
+  const rows: MediaPlanTarget[] = [];
   targets.forEach((t) => {
     if (t.campana && monthKeys.includes(t.mes)) {
-      byCampaign.set(`${t.cuenta}:${t.campana}`, t.presupuesto);
+      byCampaign.set(budgetKey(t.cuenta, t.campana), t.presupuesto);
+      rows.push(t);
     }
   });
 
-  return { byCampaign };
+  // `rows`: las filas por campaña del mes, para avisar cuáles no cruzaron con ninguna campaña (ver app/api/campaigns).
+  return { byCampaign, rows };
 }

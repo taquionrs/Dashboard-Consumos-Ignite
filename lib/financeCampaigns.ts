@@ -4,6 +4,7 @@ import { fetchGoogleAdsCampaigns } from "./windsorCampaigns";
 import { fetchMetaCampaigns } from "./windsorMeta";
 import { fetchTiktokCampaigns } from "./windsorTiktok";
 import { fetchMediaPlanBudgetByCampaign } from "./mediaPlan";
+import { budgetKey } from "./matchKeys";
 
 /**
  * Desglose por campaña para la vista Finanzas — a pedido explícito del
@@ -49,7 +50,7 @@ export async function fetchCampaignsByAccount(
       campaignId: c.campaignId,
       campaignName: c.campaignName,
       spend: c.spend,
-      budget: budgets.byCampaign.get(`${c.accountId}:${c.campaignName}`) ?? 0,
+      budget: budgets.byCampaign.get(budgetKey(c.accountId, c.campaignName)) ?? 0,
     });
     byAccount.set(c.accountId, list);
   }
