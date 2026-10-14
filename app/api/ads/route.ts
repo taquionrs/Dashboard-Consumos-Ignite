@@ -5,6 +5,7 @@ import { fetchTiktokAds } from "@/lib/windsorAdsTiktok";
 import { hasWindsorCredentials, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import { MOCK_ADS } from "@/lib/mockAds";
+import { CONNECTED_PLATFORMS } from "@/lib/platforms";
 import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export const maxDuration = 30;
 // Mismo criterio que app/api/campaigns/route.ts: ALL_PLATFORM_KEYS valida el
 // query param, CONNECTED_PLATFORMS dice cuáles ya tienen fetcher real.
 const ALL_PLATFORM_KEYS: PlatformKey[] = ["google", "meta", "tiktok", "linkedin"];
-const CONNECTED_PLATFORMS: PlatformKey[] = ["google", "meta", "tiktok"];
+// CONNECTED_PLATFORMS: ver lib/platforms.ts
 
 interface AdsResult {
   ads: AdRow[];

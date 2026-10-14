@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { PlatformKey } from "./types";
+import { isConnected } from "./platforms";
 
 /**
  * Plataformas elegidas (Meta, Google, TikTok, LinkedIn), compartidas entre TODAS las
  * pantallas de Pulso (Finanzas y las de Medios): se elige una vez y la elección
  * acompaña al usuario al cambiar de pantalla. Por defecto están todas prendidas;
  * cada persona apaga las que no quiere ver.
+ *
+ * Solo las plataformas con datos reales conectados (lib/platforms.ts) pueden estar prendidas; las demás (hoy
+ * LinkedIn) quedan siempre apagadas.
  *
  * Se recuerda en el navegador (localStorage). Si el navegador no deja guardar, la
  * pantalla funciona igual: arranca con todas prendidas en cada visita.
@@ -19,7 +23,7 @@ const ALL: PlatformKey[] = ["google", "meta", "tiktok", "linkedin"];
 export type PlatformSelection = Record<PlatformKey, boolean>;
 
 function allOn(): PlatformSelection {
-  return { google: true, meta: true, tiktok: true, linkedin: true };
+  return { google: true, meta: true, tiktok: true, linkedin: false };
 }
 
 function read(): PlatformSelection {
@@ -28,7 +32,7 @@ function read(): PlatformSelection {
     if (!raw) return allOn();
     const parsed = JSON.parse(raw) as Partial<Record<PlatformKey, unknown>>;
     const out = allOn();
-    for (const k of ALL) if (parsed[k] === false) out[k] = false;
+    for (const k of ALL) if (parsed[k] === false || !isConnected(k)) out[k] = false;
     return out;
   } catch {
     return allOn();
@@ -60,6 +64,7 @@ export function usePlatformSelection(available: PlatformKey[]) {
 
   const toggle = useCallback(
     (key: PlatformKey) => {
+      if (!isConnected(key)) return; // una plataforma sin conectar no se puede prender
       setSelection((prev) => {
         const onCount = available.filter((k) => prev[k]).length;
         if (prev[key] && onCount <= 1) return prev; // la última prendida no se apaga
@@ -72,7 +77,7 @@ export function usePlatformSelection(available: PlatformKey[]) {
   );
 
   // Si lo guardado dejara a la pantalla sin ninguna plataforma disponible, se prenden todas.
-  const effective: PlatformSelection = available.some((k) => selection[k]) ? selection : { ...selection, ...Object.fromEntries(available.map((k) => [k, true])) };
+  const effective: PlatformSelection = available.some((k) => selection[k]) ? selection : { ...selection, ...Object.fromEntries(available.filter(isConnected).map((k) => [k, true])) };
 
   return { selection: effective, toggle, ready };
 }

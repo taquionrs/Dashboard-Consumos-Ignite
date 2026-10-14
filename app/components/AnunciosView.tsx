@@ -223,7 +223,9 @@ export default function AnunciosView({ session }: { session: Session }) {
 
   const loading = !selectionReady || enabledKeys.some((k) => (statusByPlatform[k] ?? "loading") === "loading");
   const failedKeys = enabledKeys.filter((k) => statusByPlatform[k] === "error");
-  const loaded = !loading && enabledKeys.some((k) => statusByPlatform[k] === "done");
+  // Se muestra lo que ya llegó sin esperar a la plataforma más lenta (TikTok tarda 6-8 s); mientras faltan otras
+  // aparece un aviso con cuáles faltan. Los totales son parciales hasta que terminan todas.
+  const loaded = enabledKeys.some((k) => statusByPlatform[k] === "done");
   const allFailed = !loading && !loaded;
   const sources: SourceStatus[] = enabledKeys.map((k) => ({
     label: PLATFORMS.find((p) => p.key === k)?.label ?? k,
@@ -368,7 +370,8 @@ export default function AnunciosView({ session }: { session: Session }) {
         </div>
       </div>
 
-      {loading && (
+      {loading && loaded && <LoadingPanel compact what="los anuncios" sources={sources} />}
+      {loading && !loaded && (
         <LoadingPanel what="los anuncios" sources={sources}>
           <div className="ad-grid" aria-hidden="true">
             {Array.from({ length: 6 }).map((_, i) => (

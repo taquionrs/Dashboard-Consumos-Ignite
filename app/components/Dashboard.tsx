@@ -5,6 +5,7 @@ import { PageHeader } from "./PageChrome";
 import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
 import { usePlatformSelection } from "@/lib/usePlatformSelection";
+import { isConnected } from "@/lib/platforms";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientData, FinanceCampaignRow, PlatformKey, SpendResponse } from "@/lib/types";
 
@@ -587,11 +588,18 @@ export default function Dashboard({ session }: { session: Session }) {
         </div>
         <div className="controls-right chip-row" role="group" aria-label="Mostrar/ocultar plataforma">
           {platformTotals.map((p) => (
-            <button key={p.key} className="chip plat" aria-pressed={enabled[p.key]} onClick={() => togglePlatform(p.key)}>
+            <button
+              key={p.key}
+              className="chip plat"
+              aria-pressed={enabled[p.key]}
+              disabled={!isConnected(p.key)}
+              title={isConnected(p.key) ? undefined : "Todavía no está conectada: no hay datos reales para mostrar."}
+              onClick={() => togglePlatform(p.key)}
+            >
               <span className="dot" style={{ background: `var(${p.varName})` }} />
               {p.label}
               <span className="amount num">
-                {fmtFull(p.spend)}/{fmtFull(p.budget)}
+                {isConnected(p.key) ? `${fmtFull(p.spend)}/${fmtFull(p.budget)}` : "sin conectar"}
               </span>
             </button>
           ))}
