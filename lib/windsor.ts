@@ -1,5 +1,6 @@
 import type { ClientData, PlatformKey } from "./types";
 import { fetchMediaPlanBudgetByAccount } from "./mediaPlan";
+import { normAccountId } from "./matchKeys";
 import { fetchWindsorRows } from "./windsorFetch";
 
 /**
@@ -383,7 +384,7 @@ export async function fetchWindsorSpend(
           vertical: `Cuenta real (Windsor.ai — ${source.label})`,
           // Si la hoja de proyectados tiene un presupuesto para esta cuenta
           // este mes, se usa; si no, sigue en $0 (no se inventa un objetivo).
-          budget: budgetByAccount.get(t.accountId) ?? 0,
+          budget: budgetByAccount.get(normAccountId(t.accountId)) ?? 0,
           spend8: t.spend,
           mix: { [source.platformKey]: 100 } as Partial<Record<PlatformKey, number>>,
           // El CPL objetivo (distinto del presupuesto) todavía no se carga

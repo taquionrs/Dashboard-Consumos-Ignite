@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-10-14-cruce-hoja",
+    fecha: "2026-10-14",
+    tipo: "arreglo",
+    area: "medios",
+    titulo: "Presupuesto proyectado: el cruce con la hoja ya no se rompe por detalles que no se ven",
+    detalle:
+      "Antes, un número de cuenta de Google con guiones, un espacio doble o una mayúscula distinta dejaban la campaña en Sin objetivo cargado sin avisar. Ahora esos detalles no importan, y si una fila de la hoja no encuentra su campaña, Campañas lo avisa arriba con el motivo (cuenta que no existe o nombres que sí existen en esa cuenta).",
+    ruta: "/medios",
+  },
+  {
     id: "2026-10-14-plataformas-conectadas",
     fecha: "2026-10-14",
     tipo: "mejora",
