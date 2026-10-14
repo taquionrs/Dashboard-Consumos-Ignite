@@ -6,6 +6,7 @@ import { hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRang
 import { fetchMediaPlanBudgetByCampaign } from "@/lib/mediaPlan";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import { MOCK_CAMPAIGNS } from "@/lib/mockCampaigns";
+import { CONNECTED_PLATFORMS } from "@/lib/platforms";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export const maxDuration = 30;
 const ALL_PLATFORM_KEYS: PlatformKey[] = ["google", "meta", "tiktok", "linkedin"];
 
 // De esas, cuáles ya tienen fetcher de campañas contra Windsor.ai real.
-const CONNECTED_PLATFORMS: PlatformKey[] = ["google", "meta", "tiktok"];
+// CONNECTED_PLATFORMS: ver lib/platforms.ts
 
 interface CampaignsResult {
   campaigns: CampaignRow[];

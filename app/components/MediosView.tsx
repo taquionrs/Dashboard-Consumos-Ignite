@@ -196,7 +196,9 @@ export default function MediosView({ session }: { session: Session }) {
 
   const loading = !selectionReady || enabledKeys.some((k) => (statusByPlatform[k] ?? "loading") === "loading");
   const failedKeys = enabledKeys.filter((k) => statusByPlatform[k] === "error");
-  const loaded = !loading && enabledKeys.some((k) => statusByPlatform[k] === "done");
+  // Se muestra lo que ya llegó sin esperar a la plataforma más lenta (TikTok tarda 6-8 s); mientras faltan otras
+  // aparece un aviso con cuáles faltan. Los totales son parciales hasta que terminan todas.
+  const loaded = enabledKeys.some((k) => statusByPlatform[k] === "done");
   const allFailed = !loading && !loaded;
   const sources: SourceStatus[] = enabledKeys.map((k) => ({
     label: PLATFORMS.find((p) => p.key === k)?.label ?? k,
@@ -313,11 +315,11 @@ export default function MediosView({ session }: { session: Session }) {
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total proyectado</span>
-            <span className="stat-value num">{loaded ? fmtMoney(totalBudget) : "…"}</span>
+            <span className="stat-value num">{loaded ? fmtMoney(totalBudget) + (loading ? " …" : "") : "…"}</span>
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total gastado</span>
-            <span className="stat-value num">{loaded ? fmtMoney(totalSpend) : "…"}</span>
+            <span className="stat-value num">{loaded ? fmtMoney(totalSpend) + (loading ? " …" : "") : "…"}</span>
           </div>
           <button className="toggle-chip" aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
             <span className="toggle-track">
@@ -336,7 +338,8 @@ export default function MediosView({ session }: { session: Session }) {
         </div>
       </div>
 
-      {loading && <LoadingPanel what="las campañas" sources={sources} />}
+      {loading && !loaded && <LoadingPanel what="las campañas" sources={sources} />}
+      {loading && loaded && <LoadingPanel compact what="las campañas" sources={sources} />}
       {allFailed && <ErrorPanel what="Campañas" detail={failedDetail} onRetry={() => setReloadKey((k) => k + 1)} />}
       {loaded && failedKeys.length > 0 && (
         <ErrorPanel compact what={`las campañas de ${failedKeys.map((k) => PLATFORMS.find((p) => p.key === k)?.label ?? k).join(" y ")}`} detail={failedDetail} onRetry={() => setReloadKey((k) => k + 1)} />

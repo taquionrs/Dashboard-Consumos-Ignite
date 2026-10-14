@@ -524,3 +524,7 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
 
 .ready-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--text-primary); color: var(--surface); padding: 11px 20px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); z-index: 60; animation: ready-in .25s ease; }
 @keyframes ready-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.status-inline { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; margin: 0 0 14px; }
+.status-spinner.small { width: 14px; height: 14px; border-width: 2px; }
+.chip.plat:disabled { cursor: not-allowed; opacity: .4; }

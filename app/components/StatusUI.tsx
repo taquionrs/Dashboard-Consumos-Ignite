@@ -35,8 +35,19 @@ function stageFor(seconds: number, what: string): { title: string; detail: strin
  * Carga en curso: dice qué se está cargando, en qué etapa va, qué fuente ya llegó y
  * cuál falta. `children` es el esqueleto de la pantalla (opcional).
  */
-export function LoadingPanel({ what, sources, children }: { what: string; sources?: SourceStatus[]; children?: ReactNode }) {
+export function LoadingPanel({ what, sources, children, compact }: { what: string; sources?: SourceStatus[]; children?: ReactNode; compact?: boolean }) {
   const seconds = useElapsedSeconds();
+  if (compact) {
+    const pending = (sources ?? []).filter((s) => s.state === "loading").map((s) => s.label);
+    return (
+      <div className="status-inline" role="status" aria-live="polite">
+        <span className="status-spinner small" aria-hidden="true" />
+        <span>
+          Ya se ven {what} de lo que llegó. Todavía cargando: <b>{pending.join(" y ") || "lo que falta"}</b>…
+        </span>
+      </div>
+    );
+  }
   const stage = stageFor(seconds, what);
   const pct = Math.min(92, Math.round(100 * (1 - Math.exp(-seconds / 12))));
   return (

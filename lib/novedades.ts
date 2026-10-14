@@ -42,6 +42,15 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-10-14-plataformas-conectadas",
+    fecha: "2026-10-14",
+    tipo: "mejora",
+    area: "general",
+    titulo: "Solo se prenden las plataformas conectadas, y las pantallas cargan por partes",
+    detalle:
+      "LinkedIn Ads todavía no tiene datos reales, así que aparece apagada y como sin conectar. Además, en Campañas y Anuncios se ve enseguida lo que ya llegó (Google, Meta) sin esperar a la plataforma más lenta; un aviso dice cuál falta.",
+  },
+  {
     id: "2026-10-09-plataformas-y-estados",
     fecha: "2026-10-09",
     tipo: "mejora",
