@@ -46,7 +46,7 @@ const USERS_API = "/api/users";
  * o de calentamiento nueva se suma acá y TIENE que exigir CRON_SECRET; nada
  * queda abierto por estar bajo /api/cron/.
  */
-export const CRON_PATHS = ["/api/cron/notify"];
+export const CRON_PATHS = ["/api/cron/notify", "/api/cron/calentar"];
 /** Login, vuelta del login y salida: tienen que poder abrirse sin sesión. */
 export const AUTH_PREFIX = "/auth/";
 

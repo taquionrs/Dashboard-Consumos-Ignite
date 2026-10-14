@@ -22,7 +22,7 @@ Para entrar a Pulso hay que iniciar sesión con Cloudflare Zero Trust (aplicaci�
 
 El registro de usuarios usa la misma base Upstash del [registro de alertas](#registro-de-alertas-upstash-redis) (`KV_REST_API_URL`/`KV_REST_API_TOKEN`). Sin ella solo entran los administradores fijos.
 
-Sin `OIDC_*`/`SESSION_SECRET` en producción, todas las pantallas y rutas `/api/*` responden **503**: el sitio nunca se abre por omisión. La única ruta que no pasa por el login es `/api/cron/notify` (ver [Resumen diario](#resumen-diario-al-equipo-google-chat-yo-email)).
+Sin `OIDC_*`/`SESSION_SECRET` en producción, todas las pantallas y rutas `/api/*` responden **503**: el sitio nunca se abre por omisión. Las únicas rutas que no pasan por el login son `/api/cron/notify` (ver [Resumen diario](#resumen-diario-al-equipo-google-chat-yo-email)) y `/api/cron/calentar` (calentamiento diario de Windsor, 7:30 hs de Argentina aprox.): las dos exigen `Authorization: Bearer <CRON_SECRET>`.
 
 ## Google Ads API
 

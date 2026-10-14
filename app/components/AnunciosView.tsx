@@ -189,7 +189,7 @@ export default function AnunciosView({ session }: { session: Session }) {
     const timeout = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, 60000);
+    }, 100000);
     let pending = keys.length;
     let anyOk = false;
     keys.forEach((key) => {
@@ -202,7 +202,7 @@ export default function AnunciosView({ session }: { session: Session }) {
         })
         .catch((err) => {
           if (cancelled) return;
-          const msg = err?.name === "AbortError" ? (timedOut ? "La consulta tardó demasiado (más de 60 s) y se canceló." : "") : String(err?.message || err);
+          const msg = err?.name === "AbortError" ? (timedOut ? "La consulta tardó demasiado (más de 100 s) y se canceló." : "") : String(err?.message || err);
           if (!msg) return;
           setErrorByPlatform((prev) => ({ ...prev, [key]: msg }));
           setStatusByPlatform((prev) => ({ ...prev, [key]: "error" }));

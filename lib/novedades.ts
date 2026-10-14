@@ -42,6 +42,15 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-10-15-primera-carga",
+    fecha: "2026-10-15",
+    tipo: "arreglo",
+    area: "general",
+    titulo: "La primera carga del día ya no se corta con error",
+    detalle:
+      "A veces la primera consulta de un período nuevo tarda más de 20 segundos y Pulso mostraba error o una plataforma en $0. Ahora espera hasta 50 segundos y trae los datos. Además, cada mañana (alrededor de las 7:30) Pulso hace esa primera consulta por su cuenta, así que cuando entrás ya está lista.",
+  },
+  {
     id: "2026-10-14-cruce-hoja",
     fecha: "2026-10-14",
     tipo: "arreglo",
