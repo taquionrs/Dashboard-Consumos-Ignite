@@ -4,8 +4,10 @@ import { fetchJson } from "@/lib/clientFetch";
 import { MediosHeader, MediosSubnav } from "./PageChrome";
 import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady, type SourceStatus } from "./StatusUI";
+import DateRangeMenu from "./DateRangeMenu";
+import { useDateSelection } from "@/lib/dateSelection";
 import { usePlatformSelection } from "@/lib/usePlatformSelection";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
 
 // Anuncio ya combinado entre plataformas: AdRow + de qué plataforma vino.
@@ -19,16 +21,6 @@ const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
 
 // Mismo set de presets que Dashboard.tsx / MediosView.tsx — duplicado a
 // propósito, ver la nota en MediosView.tsx.
-type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
-const DATE_PRESETS: { key: DatePreset; label: string }[] = [
-  { key: "today", label: "Hoy" },
-  { key: "yesterday", label: "Ayer" },
-  { key: "7d", label: "Últimos 7 días" },
-  { key: "14d", label: "Últimos 14 días" },
-  { key: "28d", label: "Últimos 28 días" },
-  { key: "month", label: "Este mes" },
-  { key: "lastmonth", label: "Mes anterior" },
-];
 
 function fmtInt(n: number): string {
   return Math.round(n).toLocaleString("es-AR");
@@ -122,10 +114,7 @@ export default function AnunciosView({ session }: { session: Session }) {
   // Plataformas: la elección es la MISMA en todas las pantallas (se recuerda en el navegador) y por
   // defecto están todas prendidas; cada persona apaga las que no quiere ver. Ver lib/usePlatformSelection.ts.
   const { selection: platformsEnabled, toggle: togglePlatform, ready: selectionReady } = usePlatformSelection(PLATFORMS.map((p) => p.key));
-  const [datePreset, setDatePreset] = useState<DatePreset>("month");
-  const [dateMenuOpen, setDateMenuOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const { sel: dateSel, setSel: setDateSel, rangeQs } = useDateSelection();
   // Un fetch por plataforma activa: cada una se carga, y puede fallar, por separado.
   const [dataByPlatform, setDataByPlatform] = useState<Partial<Record<PlatformKey, AdsResponse>>>({});
   const [statusByPlatform, setStatusByPlatform] = useState<Partial<Record<PlatformKey, "loading" | "done" | "error">>>({});
@@ -156,27 +145,15 @@ export default function AnunciosView({ session }: { session: Session }) {
   const [brokenThumbs, setBrokenThumbs] = useState<Set<string>>(new Set());
   // Anuncio con el lightbox abierto (preview grande) — null = cerrado.
   const [lightboxAd, setLightboxAd] = useState<AdRow | null>(null);
-  const dateMenuRef = useRef<HTMLDivElement>(null);
 
   const enabledKeys = PLATFORMS.filter((p) => platformsEnabled[p.key]).map((p) => p.key);
   const enabledKeysDep = enabledKeys.join(",");
-
-  useEffect(() => {
-    if (!dateMenuOpen) return;
-    function onClickOutside(e: MouseEvent) {
-      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
-        setDateMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [dateMenuOpen]);
 
   // Qué cuentas existen depende de la plataforma y el rango elegidos — si
   // cambia cualquiera de los dos, la cuenta elegida puede dejar de existir.
   useEffect(() => {
     setAccountKey("all");
-  }, [enabledKeysDep, datePreset]);
+  }, [enabledKeysDep, rangeQs]);
 
   // Cierra el lightbox con Escape — patrón estándar de modal.
   useEffect(() => {
@@ -191,7 +168,6 @@ export default function AnunciosView({ session }: { session: Session }) {
   useEffect(() => {
     if (!selectionReady) return;
     setBrokenThumbs(new Set());
-    const range = datePreset === "custom" ? "month" : datePreset;
     const keys = enabledKeysDep.split(",").filter(Boolean) as PlatformKey[];
     const startedAt = Date.now();
     setDataByPlatform({});
@@ -210,7 +186,7 @@ export default function AnunciosView({ session }: { session: Session }) {
     let pending = keys.length;
     let anyOk = false;
     keys.forEach((key) => {
-      fetchJson<any>(`/api/ads?platform=${key}&range=${range}`, { signal: controller.signal })
+      fetchJson<any>(`/api/ads?platform=${key}&${rangeQs}`, { signal: controller.signal })
         .then((body: AdsResponse) => {
           if (cancelled) return;
           anyOk = true;
@@ -236,7 +212,7 @@ export default function AnunciosView({ session }: { session: Session }) {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [selectionReady, enabledKeysDep, datePreset, reloadKey]);
+  }, [selectionReady, enabledKeysDep, rangeQs, reloadKey]);
 
   const loading = !selectionReady || enabledKeys.some((k) => (statusByPlatform[k] ?? "loading") === "loading");
   const failedKeys = enabledKeys.filter((k) => statusByPlatform[k] === "error");
@@ -251,7 +227,6 @@ export default function AnunciosView({ session }: { session: Session }) {
   const failedDetail = failedKeys.map((k) => `${PLATFORMS.find((p) => p.key === k)?.label ?? k}: ${errorByPlatform[k]}`).join(" | ");
 
   const activeLabel = enabledKeys.map((k) => PLATFORMS.find((p) => p.key === k)?.label ?? k).join(" + ");
-  const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
   const platformLabelOf = (k: PlatformKey) => PLATFORMS.find((p) => p.key === k)?.label ?? k;
 
   const allAds: MergedAd[] = [];
@@ -314,55 +289,7 @@ export default function AnunciosView({ session }: { session: Session }) {
 
       <div className="controls-row">
         <div className="controls-left">
-          <div className="dropdown-wrap" ref={dateMenuRef}>
-            <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
-              {dateLabel} <span style={{ fontSize: 10 }}>▾</span>
-            </button>
-            {dateMenuOpen && (
-              <div className="date-menu" role="menu">
-                {DATE_PRESETS.map((d) => (
-                  <button
-                    key={d.key}
-                    role="menuitem"
-                    aria-current={datePreset === d.key}
-                    onClick={() => {
-                      setDatePreset(d.key);
-                      setDateMenuOpen(false);
-                    }}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-                <div className="date-menu-divider" />
-                <div className="date-menu-note">
-                  Windsor.ai sincroniza una vez al día — &quot;Hoy&quot; y &quot;Ayer&quot; pueden no reflejar todavía la
-                  sincronización más reciente.
-                </div>
-                <div className="date-menu-divider" />
-                <button role="menuitem" aria-current={datePreset === "custom"} onClick={() => setDatePreset("custom")}>
-                  Personalizado <span style={{ fontSize: 10 }}>{datePreset === "custom" ? "▴" : "▸"}</span>
-                </button>
-                {datePreset === "custom" && (
-                  <div className="date-custom">
-                    <label>
-                      Desde
-                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-                    </label>
-                    <label>
-                      Hasta
-                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-                    </label>
-                    <button className="date-apply" onClick={() => setDateMenuOpen(false)}>
-                      Aplicar
-                    </button>
-                    <div className="date-menu-note">
-                      El rango se guarda, pero todavía no hay histórico real conectado — sigue mostrando &quot;Este mes&quot;.
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <DateRangeMenu value={dateSel} onChange={setDateSel} />
           <button className="toggle-chip" aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
             <span className="toggle-track">
               <span className="toggle-knob" />

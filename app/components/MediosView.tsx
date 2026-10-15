@@ -4,8 +4,10 @@ import { fetchJson } from "@/lib/clientFetch";
 import { MediosHeader, MediosSubnav } from "./PageChrome";
 import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady, type SourceStatus } from "./StatusUI";
+import DateRangeMenu from "./DateRangeMenu";
+import { useDateSelection } from "@/lib/dateSelection";
 import { usePlatformSelection } from "@/lib/usePlatformSelection";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
 const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
@@ -18,16 +20,6 @@ const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
 // Dashboard.tsx) — duplicado a propósito, no importado de lib/windsor.ts:
 // ese archivo es solo-servidor. "custom" se guarda igual que en Finanzas,
 // pero todavía no hay rango personalizado real conectado — cae a "month".
-type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
-const DATE_PRESETS: { key: DatePreset; label: string }[] = [
-  { key: "today", label: "Hoy" },
-  { key: "yesterday", label: "Ayer" },
-  { key: "7d", label: "Últimos 7 días" },
-  { key: "14d", label: "Últimos 14 días" },
-  { key: "28d", label: "Últimos 28 días" },
-  { key: "month", label: "Este mes" },
-  { key: "lastmonth", label: "Mes anterior" },
-];
 
 function fmtInt(n: number): string {
   return Math.round(n).toLocaleString("es-AR");
@@ -121,10 +113,7 @@ export default function MediosView({ session }: { session: Session }) {
   // Plataformas: la elección es la MISMA en todas las pantallas (se recuerda en el navegador) y por
   // defecto están todas prendidas; cada persona apaga las que no quiere ver. Ver lib/usePlatformSelection.ts.
   const { selection: platformsEnabled, toggle: togglePlatform, ready: selectionReady } = usePlatformSelection(PLATFORMS.map((p) => p.key));
-  const [datePreset, setDatePreset] = useState<DatePreset>("month");
-  const [dateMenuOpen, setDateMenuOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const { sel: dateSel, setSel: setDateSel, rangeQs } = useDateSelection();
   // Un fetch por plataforma activa — se combinan en una sola tabla más abajo. Cada una se carga,
   // y puede fallar, por separado: si falla una, las otras se siguen mostrando.
   const [dataByPlatform, setDataByPlatform] = useState<Partial<Record<PlatformKey, CampaignsResponse>>>({});
@@ -141,28 +130,13 @@ export default function MediosView({ session }: { session: Session }) {
   // maneja Medios: CampaignRow no agrupa varias plataformas bajo un mismo
   // "cliente", cada cuenta de Windsor es de una sola plataforma).
   const [accountKey, setAccountKey] = useState<string>("all");
-  const dateMenuRef = useRef<HTMLDivElement>(null);
 
   const enabledKeys = PLATFORMS.filter((p) => platformsEnabled[p.key]).map((p) => p.key);
   const enabledKeysDep = enabledKeys.join(",");
 
   useEffect(() => {
-    if (!dateMenuOpen) return;
-    function onClickOutside(e: MouseEvent) {
-      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
-        setDateMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [dateMenuOpen]);
-
-  useEffect(() => {
     if (!selectionReady) return;
     let cancelled = false;
-    // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
-    // sigue pidiendo "month" hasta que se implemente el rango personalizado.
-    const range = datePreset === "custom" ? "month" : datePreset;
     const keys = enabledKeysDep.split(",").filter(Boolean) as PlatformKey[];
     const startedAt = Date.now();
     setDataByPlatform({});
@@ -171,7 +145,7 @@ export default function MediosView({ session }: { session: Session }) {
     let pending = keys.length;
     let anyOk = false;
     keys.forEach((key) => {
-      fetchJson<any>(`/api/campaigns?platform=${key}&range=${range}`)
+      fetchJson<any>(`/api/campaigns?platform=${key}&${rangeQs}`)
         .then((body: CampaignsResponse) => {
           if (cancelled) return;
           anyOk = true;
@@ -192,13 +166,13 @@ export default function MediosView({ session }: { session: Session }) {
     return () => {
       cancelled = true;
     };
-  }, [selectionReady, enabledKeysDep, datePreset, reloadKey]);
+  }, [selectionReady, enabledKeysDep, rangeQs, reloadKey]);
 
   // Qué cuentas existen depende de las plataformas activas y el rango — si
   // cambia cualquiera de los dos, la cuenta elegida puede dejar de existir.
   useEffect(() => {
     setAccountKey("all");
-  }, [enabledKeysDep, datePreset]);
+  }, [enabledKeysDep, rangeQs]);
 
   const loading = !selectionReady || enabledKeys.some((k) => (statusByPlatform[k] ?? "loading") === "loading");
   const failedKeys = enabledKeys.filter((k) => statusByPlatform[k] === "error");
@@ -215,7 +189,6 @@ export default function MediosView({ session }: { session: Session }) {
   const showCombined = enabledKeys.length > 1;
   const singlePlatform = !showCombined ? enabledKeys[0] : undefined;
   const activeLabel = enabledKeys.map((k) => PLATFORMS.find((p) => p.key === k)?.label ?? k).join(" + ");
-  const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
 
   const allCampaigns: MergedRow[] = [];
   enabledKeys.forEach((k) => {
@@ -270,55 +243,7 @@ export default function MediosView({ session }: { session: Session }) {
 
       <div className="controls-row">
         <div className="controls-left">
-          <div className="dropdown-wrap" ref={dateMenuRef}>
-            <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
-              {dateLabel} <span style={{ fontSize: 10 }}>▾</span>
-            </button>
-            {dateMenuOpen && (
-              <div className="date-menu" role="menu">
-                {DATE_PRESETS.map((d) => (
-                  <button
-                    key={d.key}
-                    role="menuitem"
-                    aria-current={datePreset === d.key}
-                    onClick={() => {
-                      setDatePreset(d.key);
-                      setDateMenuOpen(false);
-                    }}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-                <div className="date-menu-divider" />
-                <div className="date-menu-note">
-                  Windsor.ai sincroniza una vez al día — &quot;Hoy&quot; y &quot;Ayer&quot; pueden no reflejar todavía la
-                  sincronización más reciente.
-                </div>
-                <div className="date-menu-divider" />
-                <button role="menuitem" aria-current={datePreset === "custom"} onClick={() => setDatePreset("custom")}>
-                  Personalizado <span style={{ fontSize: 10 }}>{datePreset === "custom" ? "▴" : "▸"}</span>
-                </button>
-                {datePreset === "custom" && (
-                  <div className="date-custom">
-                    <label>
-                      Desde
-                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-                    </label>
-                    <label>
-                      Hasta
-                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-                    </label>
-                    <button className="date-apply" onClick={() => setDateMenuOpen(false)}>
-                      Aplicar
-                    </button>
-                    <div className="date-menu-note">
-                      El rango se guarda, pero todavía no hay histórico real conectado — sigue mostrando &quot;Este mes&quot;.
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <DateRangeMenu value={dateSel} onChange={setDateSel} />
           <div className="stat-chip">
             <span className="stat-label">Total proyectado</span>
             <span className="stat-value num">{loaded ? fmtMoney(totalBudget) + (loading ? " …" : "") : "…"}</span>

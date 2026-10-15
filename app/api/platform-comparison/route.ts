@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { fetchPlatformComparison, hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
+import { fetchPlatformComparison, hasWindsorCredentials } from "@/lib/windsor";
+import { parseRange } from "@/lib/rangeParam";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import type { PlatformComparisonResponse } from "@/lib/types";
 
@@ -7,13 +8,6 @@ export const dynamic = "force-dynamic";
 // Ver app/api/ads/route.ts: las consultas lentas de Windsor necesitan más de 10s.
 export const maxDuration = 90; // ver WINDSOR_TIMEOUT_MS en lib/windsorFetch.ts
 
-function parseRangeParam(request: Request): DateRangeKey {
-  const raw = new URL(request.url).searchParams.get("range");
-  return (DATE_RANGE_KEYS as string[]).includes(raw || "") ? (raw as DateRangeKey) : "month";
-}
-
-// Mismos números que el artboard "Comparación" del wireframe — para que el
-// mock y el mockup coincidan.
 const MOCK_PLATFORMS: PlatformComparisonResponse["platforms"] = [
   { platformKey: "google", label: "Google Ads", spend: 120400, conversions: 135, cpl: 892 },
   { platformKey: "meta", label: "Meta Ads", spend: 27000, conversions: 38, cpl: 711 },
@@ -21,7 +15,9 @@ const MOCK_PLATFORMS: PlatformComparisonResponse["platforms"] = [
 ];
 
 export async function GET(request: Request) {
-  const rangeKey = parseRangeParam(request);
+  const parsed = parseRange(request);
+  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const rangeKey = parsed.input;
 
   if (!hasWindsorCredentials()) {
     const body: PlatformComparisonResponse = { source: "mock", platforms: MOCK_PLATFORMS };
@@ -32,10 +28,10 @@ export async function GET(request: Request) {
   // sirve el último resultado bueno (con aviso) o se responde un error claro.
   try {
     const result = await cachedWithFallback<Awaited<ReturnType<typeof fetchPlatformComparison>>>({
-      key: `platform-comparison:${rangeKey}`,
+      key: `platform-comparison:${parsed.id}`,
       freshMs: CACHE_FRESH_MS,
       maxStaleMs: CACHE_MAX_STALE_MS,
-      load: () => fetchPlatformComparison(resolveDateRange(rangeKey)),
+      load: () => fetchPlatformComparison(parsed.range),
       isClean: (r) => r.platforms.some((p) => p.accountCount > 0) && !hasDegradedWarning(r.warnings),
       describe: (r) => r.warnings.join(" | "),
     });

@@ -4,6 +4,8 @@ import { fetchJson } from "@/lib/clientFetch";
 import { PageHeader } from "./PageChrome";
 import type { Session } from "@/lib/access";
 import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
+import DateRangeMenu from "./DateRangeMenu";
+import { useDateSelection } from "@/lib/dateSelection";
 import { usePlatformSelection } from "@/lib/usePlatformSelection";
 import { isConnected } from "@/lib/platforms";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -113,16 +115,6 @@ const H = 230;
 const plotW = W - M.l - M.r;
 const plotH = H - M.t - M.b;
 
-type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
-const DATE_PRESETS: { key: DatePreset; label: string }[] = [
-  { key: "today", label: "Hoy" },
-  { key: "yesterday", label: "Ayer" },
-  { key: "7d", label: "Últimos 7 días" },
-  { key: "14d", label: "Últimos 14 días" },
-  { key: "28d", label: "Últimos 28 días" },
-  { key: "month", label: "Este mes" },
-  { key: "lastmonth", label: "Mes anterior" },
-];
 
 type SortKey = "pacing" | "presupuesto" | "real" | "remanente";
 interface SortState {
@@ -157,10 +149,7 @@ export default function Dashboard({ session }: { session: Session }) {
   const [view, setView] = useState<"chart" | "table">("chart");
   const [chartOpen, setChartOpen] = useState(false);
   const [compareOn, setCompareOn] = useState(false);
-  const [dateMenuOpen, setDateMenuOpen] = useState(false);
-  const [datePreset, setDatePreset] = useState<DatePreset>("month");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const { sel: dateSel, setSel: setDateSel, rangeQs } = useDateSelection();
   const [bannerOpen, setBannerOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: "pacing", dir: "desc" });
   // Filtro opcional para enfocarse en lo activo — no reemplaza la
@@ -184,18 +173,6 @@ export default function Dashboard({ session }: { session: Session }) {
   const [savingBudget, setSavingBudget] = useState(false);
   const [budgetSaveError, setBudgetSaveError] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const dateMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!dateMenuOpen) return;
-    function onClickOutside(e: MouseEvent) {
-      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
-        setDateMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [dateMenuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,10 +181,7 @@ export default function Dashboard({ session }: { session: Session }) {
     // período anterior como si fueran los del nuevo.
     setData(null);
     setError(null);
-    // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
-    // sigue pidiendo "month" hasta que se implemente el rango personalizado.
-    const range = datePreset === "custom" ? "month" : datePreset;
-    fetchJson<any>(`/api/spend?range=${range}`)
+    fetchJson<any>(`/api/spend?${rangeQs}`)
       .then((body: SpendResponse) => {
         if (cancelled) return;
         setData(body);
@@ -219,7 +193,7 @@ export default function Dashboard({ session }: { session: Session }) {
     return () => {
       cancelled = true;
     };
-  }, [datePreset, reloadKey]);
+  }, [rangeQs, reloadKey]);
 
   // Total presupuesto manual — un solo valor para todo el dashboard, no
   // depende de datePreset (ver la nota de manualBudget más arriba). Se
@@ -400,13 +374,6 @@ export default function Dashboard({ session }: { session: Session }) {
     if (sort.key !== key) return <span className="sort-ico">⇅</span>;
     return <span className="sort-ico active">{sort.dir === "desc" ? "▼" : "▲"}</span>;
   }
-  function dateRangeLabel(): string {
-    if (datePreset === "custom") {
-      if (customFrom && customTo) return `${customFrom} → ${customTo}`;
-      return "Personalizado";
-    }
-    return DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
-  }
   function prevLabel(p?: number): string {
     if (p === undefined) return "—";
     if (p > 0) return `▲ +${p}%`;
@@ -493,60 +460,7 @@ export default function Dashboard({ session }: { session: Session }) {
 
       <div className="controls-row">
         <div className="controls-left">
-          <div className="dropdown-wrap" ref={dateMenuRef}>
-            <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
-              {dateRangeLabel()} <span style={{ fontSize: 10 }}>▾</span>
-            </button>
-            {dateMenuOpen && (
-              <div className="date-menu" role="menu">
-                {DATE_PRESETS.map((d) => (
-                  <button
-                    key={d.key}
-                    role="menuitem"
-                    aria-current={datePreset === d.key}
-                    onClick={() => {
-                      setDatePreset(d.key);
-                      setDateMenuOpen(false);
-                    }}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-                <div className="date-menu-divider" />
-                <div className="date-menu-note">
-                  Windsor.ai sincroniza una vez al día — &quot;Hoy&quot; y &quot;Ayer&quot; pueden no reflejar todavía la
-                  sincronización más reciente.
-                </div>
-                <div className="date-menu-divider" />
-                <button role="menuitem" aria-current={datePreset === "custom"} onClick={() => setDatePreset("custom")}>
-                  Personalizado <span style={{ fontSize: 10 }}>{datePreset === "custom" ? "▴" : "▸"}</span>
-                </button>
-                {datePreset === "custom" && (
-                  <div className="date-custom">
-                    <label>
-                      Desde
-                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-                    </label>
-                    <label>
-                      Hasta
-                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-                    </label>
-                    <button className="date-apply" onClick={() => setDateMenuOpen(false)}>
-                      Aplicar
-                    </button>
-                    <div className="date-menu-note">
-                      El rango se guarda, pero todavía no hay histórico real conectado — sigue mostrando "Este mes".
-                    </div>
-                  </div>
-                )}
-                <div className="date-menu-divider" />
-                <label className="date-compare-row">
-                  <input type="checkbox" checked={compareOn} onChange={() => setCompareOn((v) => !v)} />
-                  Comparar con el período anterior
-                </label>
-              </div>
-            )}
-          </div>
+          <DateRangeMenu value={dateSel} onChange={setDateSel} />
           <div className="stat-chip">
             <span className="stat-label">Total proyectado</span>
             {editingBudget ? (

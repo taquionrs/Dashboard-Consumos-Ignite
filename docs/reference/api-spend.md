@@ -9,6 +9,7 @@
 | Param | Valores | Default | Descripción |
 |---|---|---|---|
 | `range` | `today \| yesterday \| 7d \| 14d \| 28d \| month \| lastmonth` | `month` | Rango de fecha a consultar. Cualquier valor no reconocido cae a `month`. Ver `resolveDateRange` en [`lib/windsor.ts`](../../lib/windsor.ts) para el cálculo exacto de cada uno. Solo tiene efecto cuando `source` termina siendo `"windsor"` — el fallback de Google Ads directo (`lib/googleAds.ts`) todavía no soporta rangos, siempre consulta "mes en curso" sin importar este parámetro. |
+| `range=custom` + `from` + `to` | `from`/`to` en `AAAA-MM-DD`, ambas inclusive | — | Rango propio. Se valida en [`lib/rangeParam.ts`](../../lib/rangeParam.ts): fechas reales, desde ≤ hasta, hasta como máximo 366 días; un `to` futuro se corta en hoy. Si algo está mal responde **400** con el motivo. Lo usan también `/api/campaigns`, `/api/ads` y `/api/platform-comparison`. El presupuesto proyectado que devuelve es siempre el del mes en curso. |
 
 ## Respuesta
 
