@@ -102,3 +102,15 @@ Guarda las alertas enviadas por el cron para la pantalla **Medios → Alertas**.
 | Variable | Obligatoria | Descripción |
 |---|---|---|
 | `KV_REST_API_URL` y `KV_REST_API_TOKEN` | No — opcional | URL y token REST de la base. También se aceptan los nombres `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`. **El token es una credencial**: no va en el repo ni en un chat. Sin estas variables el resumen se envía igual, pero no se registra nada y la pantalla Alertas explica cómo activarlo. |
+
+## Revisión de campañas de Meta (API de Meta, solo lectura)
+
+Alertas de calidad de campañas (anuncio activo sin entrega, sin el pixel de Taquion, gasta sin resultados, campaña nueva sin completar, rechazados, cuenta con problema). Paso a paso en [configurar la revisión de Meta](../how-to/configurar-revision-meta.md). Sin `META_ACCESS_TOKEN` está apagada.
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `META_ACCESS_TOKEN` | Sí, para activarla | Token de un usuario del sistema del Business Manager con permiso **solo `ads_read`**. **Es una credencial**: solo en Vercel, como *Sensitive*. Va en el encabezado `Authorization`, nunca en URLs ni en mensajes. |
+| `META_PIXEL_IDS` | Para la alerta de pixel | ID(s) del pixel de Taquion, separados por coma. Sin esto no se evalúa esa alerta. |
+| `META_AD_ACCOUNT_IDS` | No | Cuentas a revisar (con o sin `act_`), separadas por coma. Por omisión, todas las asignadas al usuario del sistema. |
+| `META_REQUIRE_UTM` | No | `0` apaga el chequeo de parámetros UTM en campañas nuevas. |
+| `META_GRAPH_VERSION` | No | Versión de la Graph API. Por omisión `v23.0`. |

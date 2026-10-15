@@ -3,6 +3,7 @@ import type { AdRow, ClientData, PlatformKey } from "./types";
 import type { MediaPlanTarget } from "./mediaPlan";
 import type { FrequencyRow } from "./windsorFrequency";
 import type { AlertDraft, AlertSeverity, AlertType } from "./alertTypes";
+import type { MetaFinding, MetaAlertType } from "./metaAudit";
 
 /**
  * Resumen del equipo (martes y jueves): alertas de gasto contra presupuesto y de
@@ -65,6 +66,13 @@ export interface AdsByPlatform {
   ads: AdRow[];
 }
 
+/** Resultado de la revisión de campañas de Meta (lib/metaAudit.ts). */
+export interface MetaAuditResult {
+  findings: MetaFinding[];
+  /** Cuentas que no se pudieron leer (se avisan en el mensaje). */
+  partialErrors: string[];
+}
+
 export interface DigestInput {
   today: number;
   daysInPeriod: number;
@@ -83,6 +91,11 @@ export interface DigestInput {
   /** null = no se pudo obtener. */
   frequency: FrequencyRow[] | null;
   windowLabel: string;
+  /**
+   * Revisión de campañas de Meta: undefined = no está configurada (no se muestra la sección),
+   * null = estaba configurada pero no se pudo obtener.
+   */
+  metaAudit?: MetaAuditResult | null;
   /** Secciones que no se pudieron armar, con motivo: se muestran, no se ocultan. */
   unavailable: string[];
 }
@@ -254,6 +267,61 @@ function draftFrom(item: Item, meta: { type: AlertType; severity: AlertSeverity;
 }
 
 const built = (blocks: Block[], drafts: AlertDraft[]): Built => ({ blocks, alerts: drafts.length, drafts });
+
+// ----- Revisión de campañas de Meta (lib/metaAudit.ts)
+
+const META_BLOCKS: Array<{ type: MetaAlertType; emoji: string; title: string; note?: string }> = [
+  { type: "account_issue", emoji: "🏦", title: "Cuentas con problema" },
+  { type: "ad_issue", emoji: "⛔", title: "Anuncios rechazados o con problemas" },
+  { type: "ad_no_pixel", emoji: "🧩", title: "Sin el pixel de Taquion", note: "Campañas de conversión en el sitio sin el pixel en el conjunto de anuncios o en el seguimiento del anuncio." },
+  { type: "spend_no_results", emoji: "💸", title: "Gastan y no registran resultados", note: "Campañas de conversión con gasto y cero resultados en los últimos 3 días." },
+  { type: "ad_no_delivery", emoji: "🚫", title: "Anuncios activos sin entrega", note: "Activos hace más de 24 horas y sin una sola impresión en los últimos 3 días." },
+  { type: "campaign_incomplete", emoji: "🆕", title: "Campañas nuevas sin completar", note: "Campañas de los últimos 7 días sin presupuesto o sin parámetros UTM." },
+];
+
+export function metaAuditBlocks(audit: MetaAuditResult | null): Built {
+  const T = THRESHOLDS;
+  if (!audit) {
+    return built([{ emoji: "🛡️", title: "Revisión de campañas de Meta", items: [], empty: "⚠️ Sección no disponible en este envío." }], []);
+  }
+  const blocks: Block[] = [];
+  const drafts: AlertDraft[] = [];
+  for (const def of META_BLOCKS) {
+    const list = audit.findings.filter((f) => f.type === def.type);
+    if (list.length === 0) continue;
+    const items: Item[] = list.map((f) => ({
+      icon: f.severity === "critical" ? "🔴" : "🟠",
+      head: [C(f.title)],
+      lines: [...(f.accountName && f.accountName !== f.title ? [[f.accountName] as Rich] : []), ...f.lines.map((l) => [l] as Rich)],
+    }));
+    list.forEach((f, i) => drafts.push(draftFrom(items[i], { type: f.type, severity: f.severity, fingerprint: f.fingerprint, listed: i < T.listSize })));
+    blocks.push({ emoji: def.emoji, title: def.title, note: def.note, items: items.slice(0, T.listSize) });
+    if (list.length > T.listSize) blocks[blocks.length - 1].items.push({ icon: "➕", head: [`${list.length - T.listSize} más en Medios → Alertas`], lines: [] });
+  }
+  if (blocks.length === 0) {
+    blocks.push({ emoji: "✅", title: "Campañas de Meta", items: [], empty: "✅ Todo en orden: nada sin entrega, sin pixel ni rechazado." });
+  }
+  if (audit.partialErrors.length > 0) {
+    blocks.push({ emoji: "⚠️", title: "Cuentas de Meta que no se pudieron leer", items: audit.partialErrors.map((e) => ({ icon: "•", head: [e], lines: [] })) });
+  }
+  return built(blocks, drafts);
+}
+
+/**
+ * Mensaje de la revisión diaria de Meta (lo manda app/api/cron/calentar a Google Chat cuando hay alertas NUEVAS).
+ * `newCount`: cuántas de las alertas son nuevas (las demás ya se avisaron en los últimos días y no se repiten).
+ */
+export function buildMetaDailyMessages(audit: MetaAuditResult, newFindings: MetaFinding[], dateLabel: string): { chatMessages: string[]; alertDrafts: AlertDraft[] } {
+  const only: MetaAuditResult = { findings: newFindings, partialErrors: [] };
+  const b = metaAuditBlocks(only);
+  const head = [
+    "🛡️ *PULSO IGNITE — REVISIÓN DE CAMPAÑAS*",
+    `🗓️ _${dateLabel}_`,
+    `🔔 *${newFindings.length} alerta${newFindings.length === 1 ? "" : "s"} nueva${newFindings.length === 1 ? "" : "s"}* en Meta${audit.findings.length > newFindings.length ? ` _(${audit.findings.length - newFindings.length} más ya se avisaron y siguen abiertas)_` : ""}`,
+  ];
+  const chatMessages = packSectionForChat({ emoji: "🛡️", title: "REVISIÓN DE CAMPAÑAS · Meta", blocks: b.blocks }, [...head, ""]);
+  return { chatMessages, alertDrafts: b.drafts };
+}
 
 // ----- 1) Proyección a fin de mes
 
@@ -614,10 +682,13 @@ export function buildDigest(input: DigestInput): Digest {
   const freq = frequencyBlock(frequency, windowLabel);
   const ctr = ctrBelowCampaignBlock(adsCurrent, windowLabel);
 
+  const meta = input.metaAudit === undefined ? null : metaAuditBlocks(input.metaAudit);
+
   const sections: Section[] = [
     { emoji: "💰", title: "GASTO CONTRA PROYECTADO", blocks: [...projection.blocks, ...(nextMonth?.blocks ?? []), ...sheetB.blocks] },
     { emoji: "📣", title: "PERFORMANCE DE ANUNCIOS · crecimiento y evolución", blocks: [...cpf.blocks, ...wow.blocks] },
     { emoji: "🎯", title: "PERFORMANCE DE ANUNCIOS · calidad de los anuncios", blocks: [...freq.blocks, ...ctr.blocks] },
+    ...(meta ? [{ emoji: "🛡️", title: "REVISIÓN DE CAMPAÑAS · Meta", blocks: meta.blocks }] : []),
   ];
 
   const counts = {
@@ -627,8 +698,9 @@ export function buildDigest(input: DigestInput): Digest {
     semanaAnterior: wow.alerts,
     frecuencia: freq.alerts,
     ctrBajo: ctr.alerts,
+    ...(meta ? { revisionMeta: meta.alerts } : {}),
   };
-  const alertDrafts = [...projection.drafts, ...(nextMonth?.drafts ?? []), ...sheetB.drafts, ...wow.drafts, ...freq.drafts, ...ctr.drafts];
+  const alertDrafts = [...projection.drafts, ...(nextMonth?.drafts ?? []), ...sheetB.drafts, ...wow.drafts, ...freq.drafts, ...ctr.drafts, ...(meta?.drafts ?? [])];
   const alerts = alertDrafts.length;
 
   const subject =

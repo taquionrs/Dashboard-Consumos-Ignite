@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cronAuthorized } from "@/lib/cronAuth";
 import { hasWindsorCredentials } from "@/lib/windsor";
+import { runDailyMetaReview } from "@/lib/metaAuditRun";
 import { GET as getSpend } from "@/app/api/spend/route";
 import { GET as getCampaigns } from "@/app/api/campaigns/route";
 import { GET as getAds } from "@/app/api/ads/route";
@@ -21,7 +22,14 @@ export const maxDuration = 300;
  * Seguridad: igual que /api/cron/notify, es una ruta que el SSO deja pasar (ver CRON_PATHS en lib/access.ts)
  * y por eso exige `Authorization: Bearer <CRON_SECRET>`. Sin CRON_SECRET queda cerrada.
  *
- * GET /api/cron/calentar → calienta todo y devuelve un resumen (qué respondió bien y cuánto tardó).
+ * Además, es el cron diario de la REVISIÓN DE CAMPAÑAS DE META (lib/metaAuditRun.ts): lee la API de Meta (solo
+ * lectura, token de un usuario del sistema) y avisa a Google Chat las alertas NUEVAS (anuncio activo sin entrega,
+ * sin pixel de Taquion, gasta sin resultados, campaña nueva sin completar, rechazados, cuenta con problema). Se
+ * hace acá porque el plan Hobby de Vercel solo permite 2 crons.
+ *
+ * GET /api/cron/calentar              → calienta Windsor, revisa Meta y devuelve un resumen.
+ * GET /api/cron/calentar?dryRun=1     → igual, pero la revisión de Meta no envía ni guarda nada: devuelve el mensaje.
+ * GET /api/cron/calentar?soloMeta=1   → solo la revisión de Meta (sin calentar Windsor).
  *
  * Plan Hobby de Vercel: un cron corre como máximo una vez por día, y dentro de la hora indicada.
  */
@@ -43,13 +51,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "CRON_SECRET no está configurada en este entorno: la ruta queda cerrada." }, { status: 503 });
   }
   if (!auth) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  if (!hasWindsorCredentials()) {
-    return NextResponse.json({ error: "Falta WINDSOR_API_KEY: no hay nada que calentar." }, { status: 503 });
-  }
+  const params = new URL(request.url).searchParams;
+  const dryRun = params.get("dryRun") === "1";
+  const onlyMeta = params.get("soloMeta") === "1";
+  const warm = !onlyMeta && hasWindsorCredentials();
 
   const t0 = Date.now();
+  // La revisión de Meta y el calentamiento de Windsor son independientes: van en paralelo.
+  const metaPromise = runDailyMetaReview({ dryRun }).catch((err: any) => ({ configured: true, ok: false, found: 0, newCount: 0, sent: 0, pixelCheck: false, error: String(err?.message || err) }));
   const results = await Promise.all(
-    CALLS.map(async ({ name, run }) => {
+    (warm ? CALLS : []).map(async ({ name, run }) => {
       const start = Date.now();
       try {
         const res = await run();
@@ -63,6 +74,13 @@ export async function GET(request: Request) {
     })
   );
 
+  const meta = await metaPromise;
   const failed = results.filter((r) => !r.ok);
-  return NextResponse.json({ ok: failed.length === 0, totalSeconds: Math.round((Date.now() - t0) / 100) / 10, failed: failed.map((r) => r.name), results });
+  return NextResponse.json({
+    ok: failed.length === 0 && meta.ok,
+    totalSeconds: Math.round((Date.now() - t0) / 100) / 10,
+    failed: failed.map((r) => r.name),
+    results,
+    metaReview: meta,
+  });
 }
