@@ -37,15 +37,26 @@ function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
 
+// CPC (costo por click) = gasto ÷ clicks. Sin clicks no hay costo por click: se muestra un guion.
+function fmtCpc(spend: number, clicks: number): string {
+  if (!(clicks > 0)) return "—";
+  const v = spend / clicks;
+  return "$" + (v < 100 ? v.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(v).toLocaleString("es-AR"));
+}
+
 // Orden de rendimiento DENTRO de cada grupo de campaña (no reordena los
 // grupos entre sí) — a pedido explícito 2026-09-25, para ver de un vistazo
 // qué variante creativa escalar o pausar.
-type SortKey = "default" | "ctr" | "impressions";
+type SortKey = "default" | "ctr" | "impressions" | "cpc";
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "default", label: "Orden original" },
   { key: "ctr", label: "Mejor CTR" },
   { key: "impressions", label: "Más impresiones" },
+  { key: "cpc", label: "Menor CPC" },
 ];
+
+// Costo por click de un anuncio; sin clicks queda al final (Infinity) en los órdenes y no compite por el badge.
+const cpcOf = (a: AdRow) => (a.clicks > 0 ? a.spend / a.clicks : Infinity);
 
 function sortAdsBy(ads: MergedAd[], sortKey: SortKey): MergedAd[] {
   if (sortKey === "default") return ads;
@@ -54,6 +65,8 @@ function sortAdsBy(ads: MergedAd[], sortKey: SortKey): MergedAd[] {
     arr.sort((a, b) => b.ctr - a.ctr);
   } else if (sortKey === "impressions") {
     arr.sort((a, b) => b.impressions - a.impressions);
+  } else if (sortKey === "cpc") {
+    arr.sort((a, b) => cpcOf(a) - cpcOf(b));
   }
   return arr;
 }
@@ -68,6 +81,10 @@ function sortAdsBy(ads: MergedAd[], sortKey: SortKey): MergedAd[] {
 function bestAdInGroup(ads: MergedAd[], sortKey: SortKey): { adId: string; label: string } | null {
   if (ads.length < 2) return null;
   const criterion = sortKey === "default" ? "ctr" : sortKey;
+  if (criterion === "cpc") {
+    const top = [...ads].sort((a, b) => cpcOf(a) - cpcOf(b))[0];
+    return Number.isFinite(cpcOf(top)) ? { adId: top.adId, label: "Menor CPC" } : null;
+  }
   if (criterion === "impressions") {
     const top = [...ads].sort((a, b) => b.impressions - a.impressions)[0];
     return { adId: top.adId, label: "Más impresiones" };
@@ -496,6 +513,7 @@ export default function AnunciosView({ session }: { session: Session }) {
                               <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
                               <div className="ad-metric-row"><span>Clicks</span><span className="num">{fmtInt(ad.clicks)}</span></div>
                               <div className="ad-metric-row"><span>Gasto</span><span className="num">{fmtMoney(ad.spend)}</span></div>
+                              <div className="ad-metric-row"><span>CPC</span><span className="num">{fmtCpc(ad.spend, ad.clicks)}</span></div>
                               <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
                               <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
                               {(ad.platform === "meta" || ad.platform === "tiktok") && (

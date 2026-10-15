@@ -35,6 +35,12 @@ function fmtInt(n: number): string {
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
+// CPC (costo por click) = gasto ÷ clicks. Sin clicks no hay costo por click: se muestra un guion.
+function fmtCpc(spend: number, clicks: number): string {
+  if (!(clicks > 0)) return "—";
+  const v = spend / clicks;
+  return "$" + (v < 100 ? v.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(v).toLocaleString("es-AR"));
+}
 function fmtPct(n?: number): string {
   return n === undefined ? "—" : Math.round(n) + "%";
 }
@@ -388,6 +394,7 @@ export default function MediosView({ session }: { session: Session }) {
                   <th className="num" title="Remanente ÷ días que quedan. Entre paréntesis: variación contra el ritmo promedio de gasto actual (+ = hay que subir, − = hay que bajar).">Presup. diario recom.</th>
                   <th className="num">Impr.</th>
                   <th className="num">Clicks</th>
+                  <th className="num" title="Costo por click = gasto ÷ clicks.">CPC</th>
                   <th className="num">CPM</th>
                   <th className="num">CTR</th>
                   <th className="num">CPL</th>
@@ -477,6 +484,7 @@ export default function MediosView({ session }: { session: Session }) {
                       </td>
                       <td className="num">{fmtInt(c.impressions)}</td>
                       <td className="num">{fmtInt(c.clicks)}</td>
+                      <td className="num">{fmtCpc(c.spend, c.clicks)}</td>
                       <td className="num">{fmtMoney(c.cpm)}</td>
                       <td className="num">{c.ctr.toFixed(1)}%</td>
                       <td className="num">{fmtMoney(c.cpl)}</td>
