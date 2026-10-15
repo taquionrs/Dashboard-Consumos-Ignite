@@ -11,7 +11,7 @@ import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
 export const dynamic = "force-dynamic";
 // Meta y TikTok a nivel anuncio tardan ~9s (medido 2026-09-30); el límite por
 // defecto de una función de Vercel (10s) los cortaba en el borde.
-export const maxDuration = 30;
+export const maxDuration = 90; // ver WINDSOR_TIMEOUT_MS en lib/windsorFetch.ts
 
 // Mismo criterio que app/api/campaigns/route.ts: ALL_PLATFORM_KEYS valida el
 // query param, CONNECTED_PLATFORMS dice cuáles ya tienen fetcher real.

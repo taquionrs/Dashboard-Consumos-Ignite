@@ -18,7 +18,12 @@ import type { ResolvedDateRange } from "./windsor";
 
 const WINDSOR_BASE_URL = "https://connectors.windsor.ai";
 
-export const WINDSOR_TIMEOUT_MS = 20000;
+// 50 s: la PRIMERA consulta de una ventana de fechas nueva ("Este mes" cambia de fecha final cada día) tarda a veces
+// más de 20 s ("en frío") y las siguientes responden en segundos (medido 2026-10-14: 20 s con error, 8 s, 0,2 s).
+// Con 20 s la pantalla mostraba error o plataformas en $0; con 50 s trae los datos, aunque la primera carga sea lenta.
+// Las rutas /api tienen maxDuration 90 para dar lugar a consultas encadenadas. El cron de calentamiento
+// (/api/cron/calentar) hace esa primera consulta temprano, antes de que entre el equipo.
+export const WINDSOR_TIMEOUT_MS = 50000;
 const MAX_CONCURRENT = 8;
 const RETRY_DELAY_MS = 500;
 

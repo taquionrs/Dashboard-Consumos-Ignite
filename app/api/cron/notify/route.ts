@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { cronAuthorized } from "@/lib/cronAuth";
 import { MOCK_CLIENTS } from "@/lib/mockData";
 import { fetchWindsorSpend, hasWindsorCredentials, rangeFromDates, resolveDateRange } from "@/lib/windsor";
 import { fetchMediaPlanTargets } from "@/lib/mediaPlan";
@@ -40,14 +40,6 @@ export const maxDuration = 120;
  * no está configurada, la ruta queda cerrada: nunca se abre por omisión.
  */
 
-function isAuthorized(request: Request): boolean | "unconfigured" {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return "unconfigured";
-  const expected = Buffer.from(`Bearer ${secret}`);
-  const given = Buffer.from(request.headers.get("authorization") ?? "");
-  return given.length === expected.length && timingSafeEqual(given, expected);
-}
-
 const TZ = "America/Argentina/Buenos_Aires";
 
 /** Fecha de hoy en Argentina, YYYY-MM-DD (en-CA da ese formato). */
@@ -76,7 +68,7 @@ const PLATFORMS: PlatformKey[] = ["google", "meta", "tiktok"];
 const CRON_LAYER_TIMEOUT_MS = 70000;
 
 export async function GET(request: Request) {
-  const auth = isAuthorized(request);
+  const auth = cronAuthorized(request);
   if (auth === "unconfigured") {
     return NextResponse.json({ error: "CRON_SECRET no está configurada en este entorno: la ruta queda cerrada." }, { status: 503 });
   }

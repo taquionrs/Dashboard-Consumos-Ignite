@@ -5,7 +5,7 @@ import type { PlatformComparisonResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 // Ver app/api/ads/route.ts: las consultas lentas de Windsor necesitan más de 10s.
-export const maxDuration = 30;
+export const maxDuration = 90; // ver WINDSOR_TIMEOUT_MS en lib/windsorFetch.ts
 
 function parseRangeParam(request: Request): DateRangeKey {
   const raw = new URL(request.url).searchParams.get("range");

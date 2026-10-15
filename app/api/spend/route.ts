@@ -8,7 +8,7 @@ import type { SpendResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic"; // la caché es la de lib/cache.ts (explícita, con TTL), no la del framework
 // Ver app/api/ads/route.ts: las consultas lentas de Windsor necesitan más de 10s.
-export const maxDuration = 30;
+export const maxDuration = 90; // ver WINDSOR_TIMEOUT_MS en lib/windsorFetch.ts
 
 function mockResponse(warnings?: string[]): SpendResponse {
   return {
