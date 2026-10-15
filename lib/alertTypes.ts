@@ -4,7 +4,19 @@
  * "Alertas" de Medios (componente cliente).
  */
 
-export type AlertType = "projection" | "next_month" | "sheet" | "week_over_week" | "frequency" | "ctr_below_campaign";
+export type AlertType =
+  | "projection"
+  | "next_month"
+  | "sheet"
+  | "week_over_week"
+  | "frequency"
+  | "ctr_below_campaign"
+  | "ad_no_delivery"
+  | "ad_no_pixel"
+  | "spend_no_results"
+  | "campaign_incomplete"
+  | "ad_issue"
+  | "account_issue";
 export type AlertSeverity = "critical" | "warning";
 export type ModerationStatus = "pending" | "reviewed" | "dismissed";
 
@@ -15,6 +27,12 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   week_over_week: "📆 Variación semanal",
   frequency: "🔁 Frecuencia en Meta",
   ctr_below_campaign: "🖱️ CTR bajo el de su campaña",
+  ad_no_delivery: "🚫 Anuncio activo sin entrega",
+  ad_no_pixel: "🧩 Sin el pixel de Taquion",
+  spend_no_results: "💸 Gasta y no registra resultados",
+  campaign_incomplete: "🆕 Campaña nueva sin completar",
+  ad_issue: "⛔ Anuncio rechazado o con problemas",
+  account_issue: "🏦 Cuenta con problema",
 };
 
 export const STATUS_LABEL: Record<ModerationStatus, string> = {

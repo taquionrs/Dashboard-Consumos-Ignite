@@ -8,7 +8,8 @@ import { fetchMetaAds } from "@/lib/windsorAdsMeta";
 import { fetchTiktokAds } from "@/lib/windsorAdsTiktok";
 import { fetchMetaFrequency } from "@/lib/windsorFrequency";
 import type { FetchAdsOptions } from "@/lib/windsorFetch";
-import { buildDigest, PLATFORM_LABEL, type AdsByPlatform } from "@/lib/notifications";
+import { buildDigest, PLATFORM_LABEL, type AdsByPlatform, type MetaAuditResult } from "@/lib/notifications";
+import { runMetaAudit } from "@/lib/metaAuditRun";
 import { readEmailConfig, sendEmail } from "@/lib/email";
 import { readChatConfig, sendChatMessage } from "@/lib/chat";
 import { newRunId, readStoreConfig, saveRun } from "@/lib/alertLog";
@@ -112,10 +113,11 @@ export async function GET(request: Request) {
   const currentOpts: FetchAdsOptions = { skipDiscovery: true, range: current, timeoutMs: CRON_LAYER_TIMEOUT_MS };
   const previousOpts: FetchAdsOptions = { skipDiscovery: true, skipFollowers: true, range: previous, timeoutMs: CRON_LAYER_TIMEOUT_MS };
 
-  const [spendRes, sheetRes, freqRes, ...adsRes] = await Promise.allSettled([
+  const [spendRes, sheetRes, freqRes, metaRes, ...adsRes] = await Promise.allSettled([
     fetchWindsorSpend(MOCK_CLIENTS, monthRange),
     fetchMediaPlanTargets(),
     fetchMetaFrequency(current, CRON_LAYER_TIMEOUT_MS),
+    runMetaAudit(),
     fetchGoogleAdsAds("7d", currentOpts),
     fetchMetaAds("7d", currentOpts),
     fetchTiktokAds("7d", currentOpts),
@@ -135,6 +137,14 @@ export async function GET(request: Request) {
   let frequency = null as Awaited<ReturnType<typeof fetchMetaFrequency>> | null;
   if (freqRes.status === "fulfilled") frequency = freqRes.value;
   else unavailable.push(`Frecuencia de Meta: ${errMsg(freqRes.reason)}`);
+
+  // Revisión de campañas de Meta (API de Meta, solo lectura): undefined = no configurada, null = falló.
+  let metaAudit: MetaAuditResult | null | undefined;
+  if (metaRes.status === "fulfilled") metaAudit = metaRes.value;
+  else {
+    metaAudit = null;
+    unavailable.push(`Revisión de campañas de Meta: ${errMsg(metaRes.reason)}`);
+  }
 
   const collect = (results: PromiseSettledResult<{ ads: AdRow[]; warnings: string[]; failed?: boolean }>[], label: string): AdsByPlatform[] => {
     const out: AdsByPlatform[] = [];
@@ -170,6 +180,7 @@ export async function GET(request: Request) {
     adsPrevious,
     frequency,
     windowLabel,
+    metaAudit,
     unavailable,
   });
 
