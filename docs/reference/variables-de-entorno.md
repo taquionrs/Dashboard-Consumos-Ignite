@@ -113,5 +113,6 @@ Alertas de calidad de campañas (anuncio activo sin entrega, sin el pixel de Taq
 | `META_PIXEL_IDS` | Para la alerta de pixel | ID(s) del pixel de Taquion, separados por coma. Sin esto no se evalúa esa alerta. |
 | `META_AD_ACCOUNT_IDS` | No | Cuentas a revisar (con o sin `act_`), separadas por coma. Por omisión, todas las asignadas al usuario del sistema. |
 | `META_MAX_ALERTS` | No | Freno de seguridad (por omisión 40): si una corrida detecta más alertas nuevas que esto, no avisa ni registra nada y responde error (casi seguro es una regla mal calibrada). Con `?dryRun=1` siempre se ve el detalle. |
+| `META_EXCLUDE_ACCOUNT_IDS` | No | Cuentas publicitarias que **no** se revisan (con o sin `act_`, separadas por coma). Se suman a las que ya están excluidas en el código (`EXCLUDED_ACCOUNTS` en `lib/metaGraph.ts`: hoy "Cuenta Todo un País", 2519911211576322, que no se usa). |
 | `META_REQUIRE_UTM` | No | `0` apaga el chequeo de parámetros UTM en campañas nuevas. |
 | `META_GRAPH_VERSION` | No | Versión de la Graph API. Por omisión `v23.0`. |

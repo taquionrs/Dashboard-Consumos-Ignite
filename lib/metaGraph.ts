@@ -13,6 +13,7 @@
  * - META_AD_ACCOUNT_IDS — opcional: cuentas a revisar (con o sin "act_"), separadas por coma. Sin esto se
  *   revisan todas las cuentas asignadas al usuario del sistema.
  * - META_GRAPH_VERSION — opcional, por defecto v23.0.
+ * - META_EXCLUDE_ACCOUNT_IDS — opcional: cuentas que NO se revisan (se suman a EXCLUDED_ACCOUNTS de este archivo).
  * - META_REQUIRE_UTM — opcional: "0" apaga el chequeo de parámetros UTM en campañas nuevas.
  *
  * Nada de acá escribe en Meta: solo hay GET.
@@ -25,10 +26,18 @@ const TIMEOUT_MS = 25000;
 const MAX_PAGES = 30; // la cuenta de Taquion tiene más de 2.000 anuncios históricos: con 10 páginas quedaba cortada
 const ACCOUNT_CONCURRENCY = 3;
 
+/**
+ * Cuentas publicitarias que NO se revisan: ni se leen ni generan alertas. "Cuenta Todo un País" (2519911211576322) no se
+ * usa y tiene miles de anuncios viejos marcados como "cuenta comprometida" (decisión del equipo, 2026-10-15).
+ */
+export const EXCLUDED_ACCOUNTS = ["2519911211576322"];
+
 export interface MetaConfig {
   token: string;
   version: string;
   accountIds: string[] | null;
+  /** Cuentas que no se revisan (EXCLUDED_ACCOUNTS + META_EXCLUDE_ACCOUNT_IDS). */
+  excludedAccountIds: string[];
   pixelIds: string[];
   requireUtm: boolean;
 }
@@ -42,6 +51,7 @@ export function readMetaConfig(): MetaConfig | null {
     token,
     version: process.env.META_GRAPH_VERSION?.trim() || "v23.0",
     accountIds: accountIds.length ? accountIds : null,
+    excludedAccountIds: [...new Set([...EXCLUDED_ACCOUNTS, ...list(process.env.META_EXCLUDE_ACCOUNT_IDS).map((s) => s.replace(/^act_/i, "").replace(/D/g, ""))].filter(Boolean))],
     pixelIds: list(process.env.META_PIXEL_IDS).map((s) => s.replace(/\D/g, "")).filter(Boolean),
     requireUtm: process.env.META_REQUIRE_UTM?.trim() !== "0",
   };
@@ -291,9 +301,12 @@ export async function fetchMetaAuditData(cfg: MetaConfig, windowDays: number, no
   }));
 
   const partialErrors: string[] = [];
+  const excluded = new Set(cfg.excludedAccountIds);
   const ads: MetaAd[] = [];
   const insights: MetaInsight[] = [];
-  const queue = accounts.filter((a) => a.id);
+  // Las cuentas excluidas ni se leen (la de Todo un País tiene miles de anuncios: ahorra páginas y tiempo).
+  const queue = accounts.filter((a) => a.id && !excluded.has(a.id));
+  const kept = accounts.filter((a) => !excluded.has(a.id));
   let okCount = 0;
   const worker = async () => {
     for (let a = queue.shift(); a; a = queue.shift()) {
@@ -309,7 +322,7 @@ export async function fetchMetaAuditData(cfg: MetaConfig, windowDays: number, no
   };
   await Promise.all(Array.from({ length: Math.min(ACCOUNT_CONCURRENCY, queue.length) }, worker));
 
-  if (accounts.length === 0) throw new Error("Meta no devolvió ninguna cuenta publicitaria asignada al usuario del sistema.");
+  if (kept.length === 0) throw new Error("Meta no devolvió ninguna cuenta publicitaria asignada al usuario del sistema.");
   if (okCount === 0) throw new Error(`No se pudo leer ninguna cuenta de Meta. ${partialErrors.join(" | ")}`);
-  return { accounts, ads, insights, window, partialErrors };
+  return { accounts: kept, ads, insights, window, partialErrors };
 }

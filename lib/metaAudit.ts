@@ -29,6 +29,8 @@ export const META_THRESHOLDS = {
   newCampaignDays: 7,
   /** Máximo de nombres de anuncios que se listan en una alerta. */
   namesListed: 4,
+  /** Desde cuántas campañas de una misma cuenta con el mismo motivo se agrupa en una sola alerta de la cuenta. */
+  accountGroupMinCampaigns: 4,
 } as const;
 
 export type MetaAlertType = Extract<AlertType, "ad_no_delivery" | "ad_no_pixel" | "spend_no_results" | "campaign_incomplete" | "ad_issue" | "account_issue">;
@@ -208,22 +210,54 @@ export function evaluateMetaAudit(data: MetaAuditData, pixelIds: string[], requi
   for (const ad of data.ads) {
     if ((ad.effectiveStatus === "DISAPPROVED" || ad.effectiveStatus === "WITH_ISSUES") && isLive(ad)) troubled.set(ad.campaignId, [...(troubled.get(ad.campaignId) ?? []), ad]);
   }
+  // Cuando muchas campañas de UNA cuenta comparten el mismo motivo (caso real: "Anuncios en pausa debido a una cuenta
+  // comprometida" en miles de anuncios de una cuenta), es UN problema de la cuenta y no miles de alertas.
+  const slug = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").slice(0, 60) || "sin-motivo";
+  type Troubled = { campaignId: string; ads: MetaAd[]; rejected: MetaAd[]; reason: string };
+  const groups = new Map<string, Troubled[]>();
   for (const [campaignId, ads] of troubled) {
     const rejected = ads.filter((a) => a.effectiveStatus === "DISAPPROVED");
-    const reasons = [...new Set(ads.flatMap((a) => a.issues))].slice(0, 3);
-    const first = ads[0];
-    out.push({
-      type: "ad_issue",
-      severity: rejected.length > 0 ? "critical" : "warning",
-      fingerprint: `ad_issue:${campaignId}:${rejected.length > 0 ? "rejected" : "issues"}`,
-      title: first.campaignName,
-      accountName: first.accountName,
-      lines: [
-        ...(rejected.length > 0 ? [`${rejected.length} anuncio${rejected.length === 1 ? "" : "s"} rechazado${rejected.length === 1 ? "" : "s"} por Meta (no entregan): ${names(rejected.map((a) => a.name), T.namesListed)}`] : []),
-        ...(ads.length - rejected.length > 0 ? [`${ads.length - rejected.length} anuncio${ads.length - rejected.length === 1 ? "" : "s"} con problemas (pueden entregar limitado): ${names(ads.filter((a) => a.effectiveStatus !== "DISAPPROVED").map((a) => a.name), T.namesListed)}`] : []),
-        ...(reasons.length ? [`Motivo: ${reasons.join(" · ")}`] : []),
-      ],
-    });
+    const reason = ads.flatMap((a) => a.issues)[0] ?? "";
+    const key = `${ads[0].accountId}|${slug(reason)}`;
+    groups.set(key, [...(groups.get(key) ?? []), { campaignId, ads, rejected, reason }]);
+  }
+  for (const [key, list] of groups) {
+    const first = list[0].ads[0];
+    if (list.length >= T.accountGroupMinCampaigns) {
+      const totalAds = list.reduce((n, t) => n + t.ads.length, 0);
+      const anyRejected = list.some((t) => t.rejected.length > 0);
+      const reason = list[0].reason;
+      out.push({
+        type: "ad_issue",
+        severity: anyRejected ? "critical" : "warning",
+        fingerprint: `ad_issue_cuenta:${key}`,
+        title: first.accountName,
+        accountName: first.accountName,
+        lines: [
+          `${list.length} campañas (${int(totalAds)} anuncios) de esta cuenta comparten el mismo problema${reason ? `: ${reason}` : ""}.`,
+          `Por ejemplo: ${names(list.map((t) => t.ads[0].campaignName), T.namesListed)}`,
+          "Es un problema de la cuenta: se resuelve una sola vez, no campaña por campaña.",
+        ],
+      });
+      continue;
+    }
+    for (const t of list) {
+      const { campaignId, ads, rejected } = t;
+      const reasons = [...new Set(ads.flatMap((a) => a.issues))].slice(0, 3);
+      const f = ads[0];
+      out.push({
+        type: "ad_issue",
+        severity: rejected.length > 0 ? "critical" : "warning",
+        fingerprint: `ad_issue:${campaignId}:${rejected.length > 0 ? "rejected" : "issues"}`,
+        title: f.campaignName,
+        accountName: f.accountName,
+        lines: [
+          ...(rejected.length > 0 ? [`${rejected.length} anuncio${rejected.length === 1 ? "" : "s"} rechazado${rejected.length === 1 ? "" : "s"} por Meta (no entregan): ${names(rejected.map((a) => a.name), T.namesListed)}`] : []),
+          ...(ads.length - rejected.length > 0 ? [`${ads.length - rejected.length} anuncio${ads.length - rejected.length === 1 ? "" : "s"} con problemas (pueden entregar limitado): ${names(ads.filter((a) => a.effectiveStatus !== "DISAPPROVED").map((a) => a.name), T.namesListed)}`] : []),
+          ...(reasons.length ? [`Motivo: ${reasons.join(" · ")}`] : []),
+        ],
+      });
+    }
   }
 
   return out;
