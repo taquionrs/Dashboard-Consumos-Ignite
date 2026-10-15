@@ -1,5 +1,5 @@
 import type { FinanceCampaignRow } from "./types";
-import type { DateRangeKey } from "./windsor";
+import type { RangeInput } from "./windsor";
 import { fetchGoogleAdsCampaigns } from "./windsorCampaigns";
 import { fetchMetaCampaigns } from "./windsorMeta";
 import { fetchTiktokCampaigns } from "./windsorTiktok";
@@ -30,7 +30,7 @@ import { budgetKey } from "./matchKeys";
  * SOLO SERVER-SIDE.
  */
 export async function fetchCampaignsByAccount(
-  rangeKey: DateRangeKey
+  rangeKey: RangeInput
 ): Promise<{ byAccount: Map<string, FinanceCampaignRow[]>; warnings: string[] }> {
   const warnings: string[] = [];
 

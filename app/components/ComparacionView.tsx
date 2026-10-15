@@ -3,8 +3,10 @@
 import { fetchJson } from "@/lib/clientFetch";
 import { MediosHeader, MediosSubnav } from "./PageChrome";
 import type { Session } from "@/lib/access";
+import DateRangeMenu from "./DateRangeMenu";
+import { useDateSelection } from "@/lib/dateSelection";
 import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PlatformComparisonResponse, PlatformKey } from "@/lib/types";
 
 const PLATFORM_VAR: Partial<Record<PlatformKey, string>> = {
@@ -14,16 +16,6 @@ const PLATFORM_VAR: Partial<Record<PlatformKey, string>> = {
   linkedin: "--plat-linkedin",
 };
 
-type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
-const DATE_PRESETS: { key: DatePreset; label: string }[] = [
-  { key: "today", label: "Hoy" },
-  { key: "yesterday", label: "Ayer" },
-  { key: "7d", label: "Últimos 7 días" },
-  { key: "14d", label: "Últimos 14 días" },
-  { key: "28d", label: "Últimos 28 días" },
-  { key: "month", label: "Este mes" },
-  { key: "lastmonth", label: "Mes anterior" },
-];
 
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
@@ -33,33 +25,17 @@ function fmtInt(n: number): string {
 }
 
 export default function ComparacionView({ session }: { session: Session }) {
-  const [datePreset, setDatePreset] = useState<DatePreset>("month");
-  const [dateMenuOpen, setDateMenuOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const { sel: dateSel, setSel: setDateSel, rangeQs } = useDateSelection();
   const [data, setData] = useState<PlatformComparisonResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const dateMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!dateMenuOpen) return;
-    function onClickOutside(e: MouseEvent) {
-      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
-        setDateMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [dateMenuOpen]);
 
   useEffect(() => {
     let cancelled = false;
     const startedAt = Date.now();
     setData(null);
     setError(null);
-    const range = datePreset === "custom" ? "month" : datePreset;
-    fetchJson<any>(`/api/platform-comparison?range=${range}`)
+    fetchJson<any>(`/api/platform-comparison?${rangeQs}`)
       .then((body: PlatformComparisonResponse) => {
         if (cancelled) return;
         setData(body);
@@ -71,11 +47,10 @@ export default function ComparacionView({ session }: { session: Session }) {
     return () => {
       cancelled = true;
     };
-  }, [datePreset, reloadKey]);
+  }, [rangeQs, reloadKey]);
 
   const loading = !data && !error;
   const platforms = data?.platforms ?? [];
-  const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
   const platformsWithCpl = platforms.filter((p) => p.cpl > 0);
   const maxCpl = Math.max(1, ...platformsWithCpl.map((p) => p.cpl));
   const cheapest = platformsWithCpl.length > 1 ? [...platformsWithCpl].sort((a, b) => a.cpl - b.cpl)[0] : undefined;
@@ -102,55 +77,7 @@ export default function ComparacionView({ session }: { session: Session }) {
 
       <div className="controls-row">
         <div className="controls-left">
-          <div className="dropdown-wrap" ref={dateMenuRef}>
-            <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
-              {dateLabel} <span style={{ fontSize: 10 }}>▾</span>
-            </button>
-            {dateMenuOpen && (
-              <div className="date-menu" role="menu">
-                {DATE_PRESETS.map((d) => (
-                  <button
-                    key={d.key}
-                    role="menuitem"
-                    aria-current={datePreset === d.key}
-                    onClick={() => {
-                      setDatePreset(d.key);
-                      setDateMenuOpen(false);
-                    }}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-                <div className="date-menu-divider" />
-                <div className="date-menu-note">
-                  Windsor.ai sincroniza una vez al día — &quot;Hoy&quot; y &quot;Ayer&quot; pueden no reflejar todavía la
-                  sincronización más reciente.
-                </div>
-                <div className="date-menu-divider" />
-                <button role="menuitem" aria-current={datePreset === "custom"} onClick={() => setDatePreset("custom")}>
-                  Personalizado <span style={{ fontSize: 10 }}>{datePreset === "custom" ? "▴" : "▸"}</span>
-                </button>
-                {datePreset === "custom" && (
-                  <div className="date-custom">
-                    <label>
-                      Desde
-                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-                    </label>
-                    <label>
-                      Hasta
-                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-                    </label>
-                    <button className="date-apply" onClick={() => setDateMenuOpen(false)}>
-                      Aplicar
-                    </button>
-                    <div className="date-menu-note">
-                      El rango se guarda, pero todavía no hay histórico real conectado — sigue mostrando &quot;Este mes&quot;.
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <DateRangeMenu value={dateSel} onChange={setDateSel} />
         </div>
       </div>
 

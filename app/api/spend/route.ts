@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { MOCK_CLIENTS, MOCK_TODAY, MOCK_DAYS_IN_MONTH } from "@/lib/mockData";
 import { fetchGoogleAdsSpend, hasGoogleAdsCredentials } from "@/lib/googleAds";
-import { fetchWindsorSpend, hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
+import { fetchWindsorSpend, hasWindsorCredentials } from "@/lib/windsor";
+import { parseRange } from "@/lib/rangeParam";
 import { fetchCampaignsByAccount } from "@/lib/financeCampaigns";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import type { SpendResponse } from "@/lib/types";
@@ -20,11 +21,6 @@ function mockResponse(warnings?: string[]): SpendResponse {
   };
 }
 
-function parseRangeParam(request: Request): DateRangeKey {
-  const raw = new URL(request.url).searchParams.get("range");
-  return (DATE_RANGE_KEYS as string[]).includes(raw || "") ? (raw as DateRangeKey) : "month";
-}
-
 export async function GET(request: Request) {
   // Prioridad: Windsor.ai (capa de ingesta elegida, ver
   // docs/explanation/arquitectura-de-datos.md) > Google Ads API directo
@@ -32,16 +28,18 @@ export async function GET(request: Request) {
   // siguiente solo si FALTA configuración. Con Windsor configurado, una falla
   // en la consulta ya no cae a mock: se sirve el último dato bueno o se
   // responde 502 (ver docs/explanation/estado-y-limitaciones.md).
-  const rangeKey = parseRangeParam(request);
+  const parsed = parseRange(request);
+  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const rangeKey = parsed.input;
 
   if (hasWindsorCredentials()) {
     // Con credenciales, un fallo de Windsor NUNCA se disfraza de clientes
     // ficticios: o se sirve el último resultado bueno (con aviso) o se
     // responde un error claro.
     try {
-      const range = resolveDateRange(rangeKey);
+      const range = parsed.range;
       const result = await cachedWithFallback<SpendResponse>({
-        key: `spend:${rangeKey}`,
+        key: `spend:${parsed.id}`,
         freshMs: CACHE_FRESH_MS,
         maxStaleMs: CACHE_MAX_STALE_MS,
         load: async () => {

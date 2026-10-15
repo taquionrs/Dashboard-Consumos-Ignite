@@ -42,6 +42,15 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-10-15-fechas-personalizadas",
+    fecha: "2026-10-15",
+    tipo: "arreglo",
+    area: "general",
+    titulo: "Fechas personalizadas: ahora sí cambian los datos",
+    detalle:
+      "En el selector de fecha, Personalizado guardaba las fechas pero la pantalla seguía mostrando Este mes. Ahora elegís desde y hasta, tocás Aplicar y Finanzas, Campañas, Anuncios y Comparación muestran ese período (hasta 366 días; la fecha hasta no puede ser futura). El presupuesto proyectado sigue siendo el del mes en curso.",
+  },
+  {
     id: "2026-10-15-cpc",
     fecha: "2026-10-15",
     tipo: "nuevo",

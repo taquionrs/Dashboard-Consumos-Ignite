@@ -1,6 +1,6 @@
 import type { AdRow } from "./types";
 import { fetchWindsorRows, reasonMessage, type FetchAdsOptions } from "./windsorFetch";
-import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
+import { resolveDateRange, discoveryWindowFor, type RangeInput } from "./windsor";
 
 /**
  * Datos a nivel ANUNCIO para TikTok Ads (Medios) — mismo patrón que
@@ -97,7 +97,7 @@ function fetchLayer(fields: string, dateFrom: string, dateTo: string, timeoutMs?
   return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo, timeoutMs);
 }
 
-export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: FetchAdsOptions = {}): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
+export async function fetchTiktokAds(rangeKey: RangeInput = "month", opts: FetchAdsOptions = {}): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 

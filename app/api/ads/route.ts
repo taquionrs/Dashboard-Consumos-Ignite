@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { fetchGoogleAdsAds } from "@/lib/windsorAds";
 import { fetchMetaAds } from "@/lib/windsorAdsMeta";
 import { fetchTiktokAds } from "@/lib/windsorAdsTiktok";
-import { hasWindsorCredentials, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
+import { hasWindsorCredentials, type RangeInput } from "@/lib/windsor";
+import { parseRange } from "@/lib/rangeParam";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import { MOCK_ADS } from "@/lib/mockAds";
 import { CONNECTED_PLATFORMS } from "@/lib/platforms";
@@ -24,7 +25,7 @@ interface AdsResult {
   failed?: boolean;
 }
 
-function fetchAdsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey): Promise<AdsResult> {
+function fetchAdsForPlatform(platform: PlatformKey, rangeKey: RangeInput): Promise<AdsResult> {
   switch (platform) {
     case "google":
       return fetchGoogleAdsAds(rangeKey);
@@ -35,11 +36,6 @@ function fetchAdsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey): Pro
     default:
       return Promise.resolve({ ads: [], warnings: [] });
   }
-}
-
-function parseRangeParam(request: Request): DateRangeKey {
-  const raw = new URL(request.url).searchParams.get("range");
-  return (DATE_RANGE_KEYS as string[]).includes(raw || "") ? (raw as DateRangeKey) : "month";
 }
 
 function parsePlatformParam(request: Request): PlatformKey {
@@ -58,7 +54,9 @@ function notConnectedResponse(platform: PlatformKey): AdsResponse {
 
 export async function GET(request: Request) {
   const platform = parsePlatformParam(request);
-  const rangeKey = parseRangeParam(request);
+  const parsed = parseRange(request);
+  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const rangeKey = parsed.input;
 
   // Plataforma sin fetcher real (LinkedIn): mock explícito y rotulado.
   if (!CONNECTED_PLATFORMS.includes(platform)) {
@@ -75,7 +73,7 @@ export async function GET(request: Request) {
   // sirve el último resultado bueno (con aviso) o se responde un error claro.
   try {
     const result = await cachedWithFallback<AdsResult>({
-      key: `ads:${platform}:${rangeKey}`,
+      key: `ads:${platform}:${parsed.id}`,
       freshMs: CACHE_FRESH_MS,
       maxStaleMs: CACHE_MAX_STALE_MS,
       load: async () => {

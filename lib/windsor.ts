@@ -118,6 +118,9 @@ function addDays(d: Date, n: number): Date {
 export type DateRangeKey = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth";
 export const DATE_RANGE_KEYS: DateRangeKey[] = ["today", "yesterday", "7d", "14d", "28d", "month", "lastmonth"];
 
+/** Lo que reciben los fetchers: un preset del selector o un rango ya resuelto (rango personalizado, ver lib/rangeParam.ts). */
+export type RangeInput = DateRangeKey | ResolvedDateRange;
+
 export interface ResolvedDateRange {
   dateFrom: string;
   dateTo: string;
@@ -135,7 +138,9 @@ export interface ResolvedDateRange {
  * ayer, últimos N días, mes anterior) el período ya está 100% transcurrido
  * — today = daysInPeriod.
  */
-export function resolveDateRange(key: DateRangeKey, now: Date = new Date()): ResolvedDateRange {
+export function resolveDateRange(input: RangeInput, now: Date = new Date()): ResolvedDateRange {
+  if (typeof input !== "string") return input; // rango ya resuelto (personalizado)
+  const key = input;
   const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   switch (key) {
     case "today":

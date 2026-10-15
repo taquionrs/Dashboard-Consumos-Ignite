@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { fetchGoogleAdsCampaigns } from "@/lib/windsorCampaigns";
 import { fetchMetaCampaigns } from "@/lib/windsorMeta";
 import { fetchTiktokCampaigns } from "@/lib/windsorTiktok";
-import { hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey, type ResolvedDateRange } from "@/lib/windsor";
+import { hasWindsorCredentials, type RangeInput, type ResolvedDateRange } from "@/lib/windsor";
+import { parseRange } from "@/lib/rangeParam";
 import { fetchMediaPlanBudgetByCampaign, type MediaPlanTarget } from "@/lib/mediaPlan";
 import { budgetKey, normAccountId } from "@/lib/matchKeys";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
@@ -31,7 +32,7 @@ interface CampaignsResult {
   failed?: boolean;
 }
 
-function fetchCampaignsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey): Promise<CampaignsResult> {
+function fetchCampaignsForPlatform(platform: PlatformKey, rangeKey: RangeInput): Promise<CampaignsResult> {
   switch (platform) {
     case "google":
       return fetchGoogleAdsCampaigns(rangeKey);
@@ -42,11 +43,6 @@ function fetchCampaignsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey
     default:
       return Promise.resolve({ campaigns: [], warnings: [] });
   }
-}
-
-function parseRangeParam(request: Request): DateRangeKey {
-  const raw = new URL(request.url).searchParams.get("range");
-  return (DATE_RANGE_KEYS as string[]).includes(raw || "") ? (raw as DateRangeKey) : "month";
 }
 
 function parsePlatformParam(request: Request): PlatformKey {
@@ -86,12 +82,14 @@ function unmatchedSheetWarnings(platform: PlatformKey, rows: MediaPlanTarget[], 
 
 export async function GET(request: Request) {
   const platform = parsePlatformParam(request);
-  const rangeKey = parseRangeParam(request);
+  const parsed = parseRange(request);
+  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const rangeKey = parsed.input;
   // Se resuelve una sola vez — lo necesitan tanto los fetchers de campaña
   // (vía rangeKey) como el presupuesto diario recomendado del lado del
   // cliente (today/daysInPeriod), igual que ya hace SpendResponse para
   // Finanzas.
-  const range = resolveDateRange(rangeKey);
+  const range = parsed.range;
 
   // Plataforma sin fetcher real todavía (LinkedIn): mock explícito con
   // warning, sin importar si hay API key configurada o no.
@@ -114,7 +112,7 @@ export async function GET(request: Request) {
   // sirve el último resultado bueno (con aviso) o se responde un error claro.
   try {
     const result = await cachedWithFallback<CampaignsResult>({
-      key: `campaigns:${platform}:${rangeKey}`,
+      key: `campaigns:${platform}:${parsed.id}`,
       freshMs: CACHE_FRESH_MS,
       maxStaleMs: CACHE_MAX_STALE_MS,
       load: async () => {
@@ -131,7 +129,7 @@ export async function GET(request: Request) {
         const allWarnings = budgets.warning ? [...warnings, budgets.warning] : [...warnings];
         // Filas de la hoja de ESTA plataforma que no cruzaron con ninguna campaña: se avisa cuáles y por qué
         // (antes quedaban en "Sin objetivo cargado" sin ninguna pista). Solo con "Este mes", que es el mes del presupuesto.
-        if (rangeKey === "month") allWarnings.push(...unmatchedSheetWarnings(platform, budgets.rows, withBudget));
+        if (parsed.isMonth) allWarnings.push(...unmatchedSheetWarnings(platform, budgets.rows, withBudget));
         return { campaigns: withBudget, warnings: allWarnings };
       },
       isClean: (r) => r.campaigns.length > 0 && !hasDegradedWarning(r.warnings),

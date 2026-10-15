@@ -1,6 +1,6 @@
 import type { CampaignRow } from "./types";
 import { fetchWindsorRows } from "./windsorFetch";
-import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
+import { resolveDateRange, discoveryWindowFor, type RangeInput } from "./windsor";
 
 /**
  * Datos a nivel CAMPAÑA para Meta Ads (Medios) — mismo patrón que
@@ -86,7 +86,7 @@ function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<a
   return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
 }
 
-export async function fetchMetaCampaigns(rangeKey: DateRangeKey = "month"): Promise<{ campaigns: CampaignRow[]; warnings: string[]; failed?: boolean }> {
+export async function fetchMetaCampaigns(rangeKey: RangeInput = "month"): Promise<{ campaigns: CampaignRow[]; warnings: string[]; failed?: boolean }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { campaigns: [], warnings };
 
