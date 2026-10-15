@@ -46,6 +46,8 @@ export interface MetaFinding {
 
 const CONVERSION_OBJECTIVES = new Set(["OUTCOME_SALES", "OUTCOME_LEADS", "CONVERSIONS", "LEAD_GENERATION", "PRODUCT_CATALOG_SALES"]);
 const UTM_OBJECTIVES = new Set(["OUTCOME_SALES", "OUTCOME_LEADS", "OUTCOME_TRAFFIC", "CONVERSIONS", "LINK_CLICKS", "TRAFFIC", "LEAD_GENERATION"]);
+const LIVE_PARENT = new Set(["ACTIVE", "WITH_ISSUES", "IN_PROCESS", "PENDING_REVIEW"]);
+const NON_PIXEL_GOALS = new Set(["LEAD_GENERATION", "QUALITY_LEAD", "CONVERSATIONS", "REACH", "IMPRESSIONS", "LINK_CLICKS", "LANDING_PAGE_VIEWS", "THRUPLAY", "POST_ENGAGEMENT", "PAGE_LIKES", "PROFILE_VISIT", "VIDEO_VIEWS"]);
 const NON_WEBSITE_DESTINATIONS = new Set(["ON_AD", "MESSENGER", "WHATSAPP", "INSTAGRAM_DIRECT", "ON_POST", "ON_VIDEO", "ON_PAGE", "ON_EVENT", "APP", "SHOP_AUTOMATIC", "PHONE_CALL"]);
 
 const money = (n: number) => "$" + Math.round(n).toLocaleString("es-AR");
@@ -53,11 +55,21 @@ const int = (n: number) => Math.round(n).toLocaleString("es-AR");
 const names = (list: string[], max: number) => list.slice(0, max).join(", ") + (list.length > max ? ` y ${list.length - max} más` : "");
 const ms = (iso: string) => (iso ? new Date(iso).getTime() : NaN);
 
-/** ¿La campaña persigue una conversión en el sitio (la que necesita el pixel y registra resultados)? */
+/**
+ * ¿La campaña optimiza una conversión en el SITIO (la que necesita el pixel y registra resultados)? Solo cuando el conjunto
+ * optimiza por conversiones (OFFSITE_CONVERSIONS / VALUE) o la campaña es de ventas. Los leads con formulario
+ * (LEAD_GENERATION), los mensajes de WhatsApp (CONVERSATIONS), el tráfico y la interacción NO llevan pixel de conversión.
+ * Corregido tras la primera prueba con la cuenta real: marcaba campañas de WhatsApp y de formularios.
+ */
 function isWebsiteConversion(ad: MetaAd): boolean {
-  const byGoal = ad.adsetOptimizationGoal === "OFFSITE_CONVERSIONS" || ad.adsetOptimizationGoal === "VALUE";
-  const byObjective = CONVERSION_OBJECTIVES.has(ad.campaignObjective) && !NON_WEBSITE_DESTINATIONS.has(ad.adsetDestinationType);
-  return byGoal || byObjective;
+  if (ad.adsetOptimizationGoal === "OFFSITE_CONVERSIONS" || ad.adsetOptimizationGoal === "VALUE") return true;
+  const salesObjective = ad.campaignObjective === "OUTCOME_SALES" || ad.campaignObjective === "CONVERSIONS" || ad.campaignObjective === "PRODUCT_CATALOG_SALES";
+  return salesObjective && !NON_PIXEL_GOALS.has(ad.adsetOptimizationGoal) && !NON_WEBSITE_DESTINATIONS.has(ad.adsetDestinationType);
+}
+
+/** ¿El anuncio está realmente prendido? (él, su conjunto y su campaña). */
+function isLive(ad: MetaAd): boolean {
+  return ad.adStatus === "ACTIVE" && LIVE_PARENT.has(ad.adsetEffectiveStatus) && LIVE_PARENT.has(ad.campaignEffectiveStatus);
 }
 
 const ACCOUNT_STATUS: Record<number, string> = {
@@ -190,16 +202,27 @@ export function evaluateMetaAudit(data: MetaAuditData, pixelIds: string[], requi
     }
   }
 
-  // 5) Anuncios rechazados o con problemas
-  for (const ad of data.ads.filter((a) => a.effectiveStatus === "DISAPPROVED" || a.effectiveStatus === "WITH_ISSUES")) {
-    const disapproved = ad.effectiveStatus === "DISAPPROVED";
+  // 5) Anuncios rechazados o con problemas: SOLO los prendidos (anuncio, conjunto y campaña), agrupados por campaña
+  // (antes: un aviso por anuncio, incluidos miles de anuncios viejos con una advertencia menor).
+  const troubled = new Map<string, MetaAd[]>();
+  for (const ad of data.ads) {
+    if ((ad.effectiveStatus === "DISAPPROVED" || ad.effectiveStatus === "WITH_ISSUES") && isLive(ad)) troubled.set(ad.campaignId, [...(troubled.get(ad.campaignId) ?? []), ad]);
+  }
+  for (const [campaignId, ads] of troubled) {
+    const rejected = ads.filter((a) => a.effectiveStatus === "DISAPPROVED");
+    const reasons = [...new Set(ads.flatMap((a) => a.issues))].slice(0, 3);
+    const first = ads[0];
     out.push({
       type: "ad_issue",
-      severity: disapproved ? "critical" : "warning",
-      fingerprint: `ad_issue:${ad.id}:${ad.effectiveStatus}`,
-      title: ad.name,
-      accountName: ad.accountName,
-      lines: [`${ad.campaignName}`, disapproved ? "Anuncio rechazado por Meta: no está entregando." : "Anuncio con problemas: puede entregar limitado.", ...(ad.issues.length ? [`Motivo: ${ad.issues.slice(0, 2).join(" · ")}`] : [])],
+      severity: rejected.length > 0 ? "critical" : "warning",
+      fingerprint: `ad_issue:${campaignId}:${rejected.length > 0 ? "rejected" : "issues"}`,
+      title: first.campaignName,
+      accountName: first.accountName,
+      lines: [
+        ...(rejected.length > 0 ? [`${rejected.length} anuncio${rejected.length === 1 ? "" : "s"} rechazado${rejected.length === 1 ? "" : "s"} por Meta (no entregan): ${names(rejected.map((a) => a.name), T.namesListed)}`] : []),
+        ...(ads.length - rejected.length > 0 ? [`${ads.length - rejected.length} anuncio${ads.length - rejected.length === 1 ? "" : "s"} con problemas (pueden entregar limitado): ${names(ads.filter((a) => a.effectiveStatus !== "DISAPPROVED").map((a) => a.name), T.namesListed)}`] : []),
+        ...(reasons.length ? [`Motivo: ${reasons.join(" · ")}`] : []),
+      ],
     });
   }
 

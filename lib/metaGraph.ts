@@ -22,7 +22,7 @@
 
 const GRAPH = "https://graph.facebook.com";
 const TIMEOUT_MS = 25000;
-const MAX_PAGES = 10;
+const MAX_PAGES = 30; // la cuenta de Taquion tiene más de 2.000 anuncios históricos: con 10 páginas quedaba cortada
 const ACCOUNT_CONCURRENCY = 3;
 
 export interface MetaConfig {
@@ -62,6 +62,10 @@ export interface MetaAd {
   id: string;
   name: string;
   effectiveStatus: string;
+  /** Estado configurado del anuncio (ACTIVE = prendido; el efectivo además mira conjunto y campaña). */
+  adStatus: string;
+  adsetEffectiveStatus: string;
+  campaignEffectiveStatus: string;
   createdTime: string;
   accountId: string;
   accountName: string;
@@ -164,10 +168,10 @@ const artDay = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ });
 const ACCOUNT_FIELDS = "account_id,name,account_status,disable_reason,currency";
 
 const AD_FIELDS = [
-  "id", "name", "effective_status", "created_time", "tracking_specs", "issues_info",
+  "id", "name", "status", "effective_status", "created_time", "tracking_specs", "issues_info",
   "creative{url_tags,object_story_spec,asset_feed_spec}",
-  "adset{id,name,optimization_goal,destination_type,promoted_object,start_time,end_time,daily_budget,lifetime_budget}",
-  "campaign{id,name,objective,created_time,daily_budget,lifetime_budget}",
+  "adset{id,name,effective_status,optimization_goal,destination_type,promoted_object,start_time,end_time,daily_budget,lifetime_budget}",
+  "campaign{id,name,effective_status,objective,created_time,daily_budget,lifetime_budget}",
 ].join(",");
 
 // Estados que interesan: lo que está (o debería estar) corriendo y lo que tiene problemas.
@@ -212,6 +216,9 @@ function toAd(raw: any, account: MetaAccount): MetaAd | null {
     id: String(raw.id),
     name: String(raw.name ?? raw.id),
     effectiveStatus: String(raw.effective_status ?? ""),
+    adStatus: String(raw.status ?? ""),
+    adsetEffectiveStatus: String(adset.effective_status ?? ""),
+    campaignEffectiveStatus: String(campaign.effective_status ?? ""),
     createdTime: String(raw.created_time ?? ""),
     accountId: account.id,
     accountName: account.name,
