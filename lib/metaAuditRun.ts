@@ -19,6 +19,16 @@ import type { DeliveryResult, RunRecord } from "./alertTypes";
 /** Una alerta ya avisada no se vuelve a mandar al chat durante estos días (sigue visible en Medios → Alertas). */
 export const DEDUPE_DAYS = 3;
 
+/**
+ * Freno de seguridad: si una corrida detecta más alertas nuevas que esto, NO se avisa ni se registra nada (casi seguro
+ * es una regla mal calibrada o datos raros, no 40 problemas reales de golpe). Pasó en la primera prueba con la cuenta
+ * real: 2.014 alertas, casi todas falsas. Se puede subir con META_MAX_ALERTS; con dryRun siempre se ve el detalle.
+ */
+export function maxFreshAlerts(): number {
+  const n = Number(process.env.META_MAX_ALERTS);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 40;
+}
+
 const TZ = "America/Argentina/Buenos_Aires";
 
 export async function runMetaAudit(now: Date = new Date()): Promise<MetaAuditResult | undefined> {
@@ -70,6 +80,16 @@ export async function runDailyMetaReview(opts: { dryRun?: boolean } = {}, now: D
   if (fresh.length === 0) return { ...base, ok: true, found: audit.findings.length, newCount: 0, sent: 0 };
 
   const dateLabel = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: TZ });
+  if (!opts.dryRun && fresh.length > maxFreshAlerts()) {
+    return {
+      ...base,
+      ok: false,
+      found: audit.findings.length,
+      newCount: fresh.length,
+      sent: 0,
+      error: `Se detectaron ${fresh.length} alertas nuevas (más de ${maxFreshAlerts()}): se frenó el envío para no inundar el chat. Revisá el detalle con ?soloMeta=1&dryRun=1; si son reales, subí META_MAX_ALERTS.`,
+    };
+  }
   const { chatMessages, alertDrafts } = buildMetaDailyMessages(audit, fresh, dateLabel);
   if (opts.dryRun) return { ...base, ok: true, found: audit.findings.length, newCount: fresh.length, sent: 0, messages: chatMessages };
 

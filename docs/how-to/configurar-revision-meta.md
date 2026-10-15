@@ -38,6 +38,14 @@ Con el header `Authorization: Bearer <CRON_SECRET>`:
 - `GET /api/cron/calentar?soloMeta=1&dryRun=1` → corre la revisión y devuelve el mensaje que se mandaría, sin enviar ni guardar nada. Si algo falla, `metaReview.error` dice qué.
 - `GET /api/cron/calentar?soloMeta=1` → la corre de verdad (avisa a Chat y registra).
 
+## Calibración con la cuenta real (2026-10-15)
+
+La primera prueba en seco contra la cuenta real de Taquion devolvió **2.014 alertas**, casi todas falsas, y se corrigió antes de avisar nada:
+
+- Los anuncios con una advertencia menor ("Revisa 1 advertencia") eran miles, la mayoría de campañas pausadas o archivadas. Ahora solo cuentan los anuncios **realmente prendidos** (el anuncio, su conjunto y su campaña) y se agrupan en **un aviso por campaña**.
+- El pixel solo se exige a campañas que optimizan **conversiones en el sitio** (ventas, o conjuntos con optimización por conversiones). Los leads con formulario, WhatsApp, tráfico e interacción no llevan pixel de conversión.
+- Hay un **freno**: si una corrida detecta más de 40 alertas nuevas (`META_MAX_ALERTS`), no avisa ni registra nada y responde error. Mirá siempre el detalle con `?soloMeta=1&dryRun=1` antes de tocar el límite.
+
 ## Cómo funciona en producción
 
 - **Todos los días** (junto con el calentamiento de Windsor, ~7:30 hs de Argentina) se revisa Meta y se avisa **solo lo nuevo**: una alerta ya avisada no se repite en el chat durante 3 días (sigue visible en Medios → Alertas).

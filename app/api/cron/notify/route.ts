@@ -9,7 +9,7 @@ import { fetchTiktokAds } from "@/lib/windsorAdsTiktok";
 import { fetchMetaFrequency } from "@/lib/windsorFrequency";
 import type { FetchAdsOptions } from "@/lib/windsorFetch";
 import { buildDigest, PLATFORM_LABEL, type AdsByPlatform, type MetaAuditResult } from "@/lib/notifications";
-import { runMetaAudit } from "@/lib/metaAuditRun";
+import { runMetaAudit, maxFreshAlerts } from "@/lib/metaAuditRun";
 import { readEmailConfig, sendEmail } from "@/lib/email";
 import { readChatConfig, sendChatMessage } from "@/lib/chat";
 import { newRunId, readStoreConfig, saveRun } from "@/lib/alertLog";
@@ -140,8 +140,14 @@ export async function GET(request: Request) {
 
   // Revisión de campañas de Meta (API de Meta, solo lectura): undefined = no configurada, null = falló.
   let metaAudit: MetaAuditResult | null | undefined;
-  if (metaRes.status === "fulfilled") metaAudit = metaRes.value;
-  else {
+  if (metaRes.status === "fulfilled") {
+    metaAudit = metaRes.value;
+    // Mismo freno que la revisión diaria: una cantidad absurda de alertas es una regla mal calibrada, no un resumen útil.
+    if (metaAudit && metaAudit.findings.length > maxFreshAlerts()) {
+      unavailable.push(`Revisión de campañas de Meta: ${metaAudit.findings.length} alertas (más de ${maxFreshAlerts()}): se omite hasta revisar las reglas (?soloMeta=1&dryRun=1 en /api/cron/calentar).`);
+      metaAudit = null;
+    }
+  } else {
     metaAudit = null;
     unavailable.push(`Revisión de campañas de Meta: ${errMsg(metaRes.reason)}`);
   }
