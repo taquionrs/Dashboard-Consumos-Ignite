@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-10-15-cpc",
+    fecha: "2026-10-15",
+    tipo: "nuevo",
+    area: "medios",
+    titulo: "CPC (costo por click) en Campañas y Anuncios",
+    detalle:
+      "Campañas tiene una columna nueva, CPC, y cada tarjeta de Anuncios muestra su costo por click. En Anuncios, el orden Menor CPC pone arriba a los anuncios que más barato consiguen cada click, con una insignia en el mejor de cada campaña. Es gasto dividido clicks; sin clicks se ve un guion.",
+    ruta: "/medios",
+  },
+  {
     id: "2026-10-15-primera-carga",
     fecha: "2026-10-15",
     tipo: "arreglo",
