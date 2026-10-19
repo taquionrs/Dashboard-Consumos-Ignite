@@ -10,7 +10,8 @@ import type { DeliveryResult, RunRecord } from "./alertTypes";
  * Corre la revisión de campañas de Meta (lecturas a la API de Meta + reglas de lib/metaAudit.ts).
  * - runMetaAudit: devuelve los hallazgos. `undefined` = no está configurada (falta META_ACCESS_TOKEN).
  *   Lo usa el resumen de martes y jueves y la revisión diaria.
- * - runDailyMetaReview: la revisión diaria (la dispara app/api/cron/calentar): avisa a Google Chat SOLO las alertas
+ * - runDailyMetaReview: la revisión "de lo nuevo" (la dispara app/api/cron/calentar solo a mano con ?soloMeta=1, con ?meta=1 o con
+ *   META_DAILY_REVIEW=1; por omisión las alertas de Meta salen solo en el resumen de martes y jueves): avisa a Google Chat SOLO las alertas
  *   nuevas (las que no se avisaron en los últimos DEDUPE_DAYS días) y las deja en el registro de Medios → Alertas.
  *
  * SOLO SERVER-SIDE.
