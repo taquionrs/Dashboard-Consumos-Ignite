@@ -48,8 +48,8 @@ La primera prueba en seco contra la cuenta real de Taquion devolvió **2.014 ale
 
 ## Cómo funciona en producción
 
-- **Todos los días** (junto con el calentamiento de Windsor, ~7:30 hs de Argentina) se revisa Meta y se avisa **solo lo nuevo**: una alerta ya avisada no se repite en el chat durante 3 días (sigue visible en Medios → Alertas).
-- **Martes y jueves** el resumen completo incluye una sección "Revisión de campañas · Meta" con todo lo abierto.
+- **Martes y jueves (8:00 hs de Argentina)** el resumen incluye la sección "Revisión de campañas · Meta" con todo lo abierto, y queda registrado en Medios → Alertas. **Es el único momento en que la revisión avisa al canal**, como se planificó.
+- El cron diario (~7:30) solo calienta Windsor y no manda mensajes. La revisión diaria, que avisa solo lo nuevo (no repite una alerta ya avisada durante 3 días), quedó disponible pero apagada: se activa con `META_DAILY_REVIEW=1`, o a mano con `?soloMeta=1`.
 - Si una cuenta no se puede leer, se avisa en el mensaje; si no se puede leer ninguna, la sección figura como no disponible.
 - El token va en el encabezado `Authorization` y nunca aparece en URLs, mensajes de error ni respuestas.
 - Meta nombra de varias formas los resultados de conversión (`purchase`, `offsite_conversion.fb_pixel_purchase`, `lead`...): ver `RESULT_ACTION` en [`lib/metaGraph.ts`](../../lib/metaGraph.ts) si una campaña legítima figura como "sin resultados".

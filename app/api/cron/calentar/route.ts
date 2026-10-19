@@ -22,14 +22,14 @@ export const maxDuration = 300;
  * Seguridad: igual que /api/cron/notify, es una ruta que el SSO deja pasar (ver CRON_PATHS en lib/access.ts)
  * y por eso exige `Authorization: Bearer <CRON_SECRET>`. Sin CRON_SECRET queda cerrada.
  *
- * Además, es el cron diario de la REVISIÓN DE CAMPAÑAS DE META (lib/metaAuditRun.ts): lee la API de Meta (solo
- * lectura, token de un usuario del sistema) y avisa a Google Chat las alertas NUEVAS (anuncio activo sin entrega,
- * sin pixel de Taquion, gasta sin resultados, campaña nueva sin completar, rechazados, cuenta con problema). Se
- * hace acá porque el plan Hobby de Vercel solo permite 2 crons.
+ * La REVISIÓN DE CAMPAÑAS DE META (lib/metaAuditRun.ts) NO corre sola todos los días: sus alertas llegan al canal solo
+ * los martes y jueves, dentro del resumen (app/api/cron/notify), que es lo que el equipo planificó. Acá se puede
+ * correr a mano (?soloMeta=1) o volver a activar la revisión diaria con META_DAILY_REVIEW=1 (avisa solo lo nuevo).
  *
- * GET /api/cron/calentar              → calienta Windsor, revisa Meta y devuelve un resumen.
- * GET /api/cron/calentar?dryRun=1     → igual, pero la revisión de Meta no envía ni guarda nada: devuelve el mensaje.
- * GET /api/cron/calentar?soloMeta=1   → solo la revisión de Meta (sin calentar Windsor).
+ * GET /api/cron/calentar              → calienta Windsor (y nada más; no manda mensajes).
+ * GET /api/cron/calentar?soloMeta=1   → solo la revisión de Meta (sin calentar Windsor); avisa a Chat lo nuevo.
+ * GET /api/cron/calentar?soloMeta=1&dryRun=1 → igual, pero no envía ni guarda nada: devuelve el mensaje.
+ * GET /api/cron/calentar?meta=1       → calienta Windsor y además revisa Meta.
  *
  * Plan Hobby de Vercel: un cron corre como máximo una vez por día, y dentro de la hora indicada.
  */
@@ -58,7 +58,9 @@ export async function GET(request: Request) {
 
   const t0 = Date.now();
   // La revisión de Meta y el calentamiento de Windsor son independientes: van en paralelo.
-  const metaPromise = runDailyMetaReview({ dryRun }).catch((err: any) => ({ configured: true, ok: false, found: 0, newCount: 0, sent: 0, pixelCheck: false, error: String(err?.message || err) }));
+  const runMeta = onlyMeta || params.get("meta") === "1" || process.env.META_DAILY_REVIEW === "1";
+  const skipped = { configured: true, ok: true, found: 0, newCount: 0, sent: 0, pixelCheck: false, skipped: true as const };
+  const metaPromise = (runMeta ? runDailyMetaReview({ dryRun }) : Promise.resolve(skipped)).catch((err: any) => ({ configured: true, ok: false, found: 0, newCount: 0, sent: 0, pixelCheck: false, error: String(err?.message || err) }));
   const results = await Promise.all(
     (warm ? CALLS : []).map(async ({ name, run }) => {
       const start = Date.now();
