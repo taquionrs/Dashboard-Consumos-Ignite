@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-10-22-costo-por-seguidor",
+    fecha: "2026-10-22",
+    tipo: "nuevo",
+    area: "medios",
+    titulo: "Anuncios: costo por seguidor",
+    detalle:
+      "Cada anuncio de Meta y TikTok muestra ahora el costo por seguidor: lo gastado dividido por los seguidores ganados. Si el anuncio no ganó seguidores, se ve un guion.",
+    ruta: "/medios/anuncios",
+  },
+  {
     id: "2026-10-15-fechas-personalizadas",
     fecha: "2026-10-15",
     tipo: "arreglo",

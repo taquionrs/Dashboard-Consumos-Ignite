@@ -29,10 +29,11 @@ function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
 
-// CPC (costo por click) = gasto ÷ clicks. Sin clicks no hay costo por click: se muestra un guion.
-function fmtCpc(spend: number, clicks: number): string {
-  if (!(clicks > 0)) return "—";
-  const v = spend / clicks;
+// Costo por unidad = gasto ÷ unidades: CPC (costo por click) con los clicks, costo por seguidor con los seguidores
+// ganados. Sin unidades no hay costo: se muestra un guion.
+function fmtCpc(spend: number, units: number): string {
+  if (!(units > 0)) return "—";
+  const v = spend / units;
   return "$" + (v < 100 ? v.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(v).toLocaleString("es-AR"));
 }
 
@@ -448,6 +449,14 @@ export default function AnunciosView({ session }: { session: Session }) {
                                   <span>Seguidores ganados</span>
                                   <span className="num" title={ad.followers === undefined ? "No se pudo cargar esta métrica. Tocá Reintentar o volvé a abrir la pantalla en unos minutos." : undefined}>
                                     {ad.followers === undefined ? "—" : fmtInt(ad.followers)}
+                                  </span>
+                                </div>
+                              )}
+                              {(ad.platform === "meta" || ad.platform === "tiktok") && (
+                                <div className="ad-metric-row">
+                                  <span>Costo por seguidor</span>
+                                  <span className="num" title="Gasto ÷ seguidores ganados. Sin seguidores ganados no hay costo por seguidor.">
+                                    {ad.followers === undefined ? "—" : fmtCpc(ad.spend, ad.followers)}
                                   </span>
                                 </div>
                               )}
