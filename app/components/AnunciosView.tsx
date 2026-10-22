@@ -146,6 +146,16 @@ export default function AnunciosView({ session }: { session: Session }) {
   const [brokenThumbs, setBrokenThumbs] = useState<Set<string>>(new Set());
   // Anuncio con el lightbox abierto (preview grande) — null = cerrado.
   const [lightboxAd, setLightboxAd] = useState<AdRow | null>(null);
+  // Tarjetas con la explicación de "Costo por seguidor" abierta (el ? de la fila).
+  const [helpOpen, setHelpOpen] = useState<Set<string>>(new Set());
+  function toggleHelp(adId: string) {
+    setHelpOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(adId)) next.delete(adId);
+      else next.add(adId);
+      return next;
+    });
+  }
 
   const enabledKeys = PLATFORMS.filter((p) => platformsEnabled[p.key]).map((p) => p.key);
   const enabledKeysDep = enabledKeys.join(",");
@@ -454,10 +464,38 @@ export default function AnunciosView({ session }: { session: Session }) {
                               )}
                               {(ad.platform === "meta" || ad.platform === "tiktok") && (
                                 <div className="ad-metric-row">
-                                  <span>Costo por seguidor</span>
-                                  <span className="num" title="Gasto ÷ seguidores ganados. Sin seguidores ganados no hay costo por seguidor.">
-                                    {ad.followers === undefined ? "—" : fmtCpc(ad.spend, ad.followers)}
+                                  <span>
+                                    Costo por seguidor
+                                    <button
+                                      type="button"
+                                      className="help-btn"
+                                      aria-expanded={helpOpen.has(ad.adId)}
+                                      aria-label="Cómo se calcula el costo por seguidor"
+                                      title="Cómo se calcula"
+                                      onClick={() => toggleHelp(ad.adId)}
+                                    >
+                                      ?
+                                    </button>
                                   </span>
+                                  <span className="num">{ad.followers === undefined ? "—" : fmtCpc(ad.spend, ad.followers)}</span>
+                                </div>
+                              )}
+                              {(ad.platform === "meta" || ad.platform === "tiktok") && helpOpen.has(ad.adId) && (
+                                <div className="help-box" role="note">
+                                  <b>Costo por seguidor = Gasto ÷ Seguidores ganados</b>
+                                  <div>
+                                    {ad.followers === undefined
+                                      ? "En este momento no se pudo cargar el dato de seguidores, por eso no se puede calcular."
+                                      : ad.followers > 0
+                                      ? `En este anuncio: ${fmtMoney(ad.spend)} ÷ ${fmtInt(ad.followers)} seguidores = ${fmtCpc(ad.spend, ad.followers)} por seguidor.`
+                                      : "Este anuncio no ganó seguidores en el período: no se puede dividir por cero, por eso se ve un guion."}
+                                  </div>
+                                  <div>
+                                    El gasto y los seguidores vienen de Windsor.ai; Pulso solo hace la división.{" "}
+                                    {ad.platform === "meta"
+                                      ? "En Meta, los seguidores ganados suman los seguidores de Instagram y los me gusta de la página atribuidos al anuncio."
+                                      : "En TikTok, los seguidores ganados son los follows que el anuncio generó."}
+                                  </div>
                                 </div>
                               )}
                             </div>

@@ -48,7 +48,7 @@ export const NOVEDADES: Novedad[] = [
     area: "medios",
     titulo: "Anuncios: costo por seguidor",
     detalle:
-      "Cada anuncio de Meta y TikTok muestra ahora el costo por seguidor: lo gastado dividido por los seguidores ganados. Si el anuncio no ganó seguidores, se ve un guion.",
+      "Cada anuncio de Meta y TikTok muestra ahora el costo por seguidor: lo gastado dividido por los seguidores ganados. Si el anuncio no ganó seguidores, se ve un guion. Tocá el ? al lado del nombre para ver cómo se calcula, con la cuenta de ese anuncio.",
     ruta: "/medios/anuncios",
   },
   {
