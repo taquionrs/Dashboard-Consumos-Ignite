@@ -529,3 +529,8 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
 .status-spinner.small { width: 14px; height: 14px; border-width: 2px; }
 .chip.plat:disabled { cursor: not-allowed; opacity: .4; }
 .date-error { margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--status-critical); }
+.help-btn { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-left: 6px; padding: 0; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted); font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: 1px; }
+.help-btn:hover, .help-btn[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.help-box { margin: 4px 0 6px; padding: 8px 10px; border-radius: 6px; background: var(--surface-2); font-size: 11.5px; line-height: 1.45; color: var(--text-secondary); }
+.help-box b { display: block; margin-bottom: 4px; color: var(--text-primary); }
+.help-box div + div { margin-top: 4px; }
