@@ -1,4 +1,4 @@
-import { MEDIOS_PAGES, PAGES, USERS_PATH, type Session } from "@/lib/access";
+import { EQUIVALENCIAS_PATH, MEDIOS_PAGES, PAGES, USERS_PATH, type Session } from "@/lib/access";
 
 const muted = { fontSize: 12.5, color: "var(--text-muted)" };
 
@@ -6,7 +6,7 @@ const muted = { fontSize: 12.5, color: "var(--text-muted)" };
  * Encabezado: links a las otras secciones que el usuario tiene habilitadas
  * (Finanzas, Medios, Usuarios) y la cuenta con la que entró, con la salida.
  */
-export default function SessionLinks({ session, current }: { session: Session; current: "finanzas" | "medios" | "usuarios" }) {
+export default function SessionLinks({ session, current }: { session: Session; current: "finanzas" | "medios" | "usuarios" | "equivalencias" }) {
   const medios = PAGES.find((p) => MEDIOS_PAGES.includes(p.key) && session.pages.includes(p.key));
   return (
     <>
@@ -18,6 +18,11 @@ export default function SessionLinks({ session, current }: { session: Session; c
       {current !== "medios" && medios && (
         <a href={medios.path} style={muted}>
           Ver perfil Medios →
+        </a>
+      )}
+      {current !== "equivalencias" && session.pages.includes("finanzas") && (
+        <a href={EQUIVALENCIAS_PATH} style={muted}>
+          Equivalencias
         </a>
       )}
       {current !== "usuarios" && session.admin && (
