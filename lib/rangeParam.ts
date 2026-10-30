@@ -34,7 +34,11 @@ function isRealDate(s: string): boolean {
 }
 
 export function parseRange(request: Request, now: Date = new Date()): ParsedRange | { error: string } {
-  const sp = new URL(request.url).searchParams;
+  return parseRangeParams(new URL(request.url).searchParams, now);
+}
+
+/** Lo mismo que parseRange, desde los parámetros ya separados (lo usa también la generación de cortes, que los arma desde un cuerpo JSON). */
+export function parseRangeParams(sp: URLSearchParams, now: Date = new Date()): ParsedRange | { error: string } {
   const raw = sp.get("range") || "";
 
   if (raw === "custom") {

@@ -43,6 +43,10 @@ const USERS_API = "/api/users";
 export const EQUIVALENCIAS_PATH = "/equivalencias";
 const EQUIVALENCIAS_API = "/api/equivalencias";
 
+/** Cortes de finanzas (foto congelada de un período): también para quien tiene la página Finanzas. */
+export const CORTES_PATH = "/cortes";
+const CORTES_API = "/api/cortes";
+
 /**
  * Únicas rutas sin SSO: las llama un cron de vercel.json, no una persona, y
  * cada una se protege sola con `Authorization: Bearer <CRON_SECRET>` (ver
@@ -74,6 +78,7 @@ export function requiredAccess(pathname: string): PageKey | "admin" | "any" | "d
     if (pathname === p.path || p.apis.some((api) => underPath(pathname, api))) return p.key;
   }
   if (underPath(pathname, EQUIVALENCIAS_PATH) || underPath(pathname, EQUIVALENCIAS_API)) return "finanzas";
+  if (underPath(pathname, CORTES_PATH) || underPath(pathname, CORTES_API)) return "finanzas";
   if (underPath(pathname, USERS_PATH) || underPath(pathname, USERS_API)) return "admin";
   return pathname.startsWith("/api/") ? "deny" : "any";
 }
