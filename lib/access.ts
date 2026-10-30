@@ -39,6 +39,10 @@ export const PROFILES: { label: string; pages: PageKey[] }[] = [
 export const USERS_PATH = "/usuarios";
 const USERS_API = "/api/users";
 
+/** Equivalencias cuenta publicitaria → cliente de Superlum: las maneja quien tiene la página Finanzas. */
+export const EQUIVALENCIAS_PATH = "/equivalencias";
+const EQUIVALENCIAS_API = "/api/equivalencias";
+
 /**
  * Únicas rutas sin SSO: las llama un cron de vercel.json, no una persona, y
  * cada una se protege sola con `Authorization: Bearer <CRON_SECRET>` (ver
@@ -69,6 +73,7 @@ export function requiredAccess(pathname: string): PageKey | "admin" | "any" | "d
   for (const p of PAGES) {
     if (pathname === p.path || p.apis.some((api) => underPath(pathname, api))) return p.key;
   }
+  if (underPath(pathname, EQUIVALENCIAS_PATH) || underPath(pathname, EQUIVALENCIAS_API)) return "finanzas";
   if (underPath(pathname, USERS_PATH) || underPath(pathname, USERS_API)) return "admin";
   return pathname.startsWith("/api/") ? "deny" : "any";
 }

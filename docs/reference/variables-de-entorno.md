@@ -117,3 +117,14 @@ Alertas de calidad de campañas (anuncio activo sin entrega, sin el pixel de Taq
 | `META_EXCLUDE_ACCOUNT_IDS` | No | Cuentas publicitarias que **no** se revisan (con o sin `act_`, separadas por coma). Se suman a las que ya están excluidas en el código (`EXCLUDED_ACCOUNTS` en `lib/metaGraph.ts`: hoy "Cuenta Todo un País", 2519911211576322, que no se usa). |
 | `META_REQUIRE_UTM` | No | `0` apaga el chequeo de parámetros UTM en campañas nuevas. |
 | `META_GRAPH_VERSION` | No | Versión de la Graph API. Por omisión `v23.0`. |
+
+## Equivalencias con Superlum (clientes y proyectos)
+
+La pantalla `/equivalencias` (para quien tiene la página Finanzas) vincula cada cuenta publicitaria de Pulso con un cliente —y opcionalmente un proyecto— de Superlum. La lista de clientes y proyectos sale del Maestro de Superlum (solo lectura); los vínculos se guardan en la misma base Upstash que el [registro de usuarios](#login-con-sso-y-usuarios), con auditoría de quién cambió qué. Código en [`lib/equivalenciasCore.ts`](../../lib/equivalenciasCore.ts), [`lib/equivalencias.ts`](../../lib/equivalencias.ts) y [`lib/maestro.ts`](../../lib/maestro.ts).
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `MAESTRO_TOKEN` | Sí, para vincular | Token de lectura del Maestro que da Superlum. **Es una credencial**: solo en el hosting, como *Sensitive*; nunca en el código ni en un chat. Sin ella la pantalla abre pero avisa que no puede leer los clientes. |
+| `MAESTRO_URL` | No | Por omisión `https://superlum.netlify.app/api/integrations/maestro`. Tiene que ser `https://`. |
+
+Una cuenta se identifica por su ID con solo dígitos (`957-027-5909` y `9570275909` son la misma). El cliente y el proyecto se guardan por su `id` de Superlum, que no cambia si los renombran. Sin `KV_REST_API_*` la pantalla avisa que el registro no está configurado.
