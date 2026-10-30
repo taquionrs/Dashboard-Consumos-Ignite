@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { MOCK_CLIENTS, MOCK_TODAY, MOCK_DAYS_IN_MONTH } from "@/lib/mockData";
 import { fetchGoogleAdsSpend, hasGoogleAdsCredentials } from "@/lib/googleAds";
-import { fetchWindsorSpend, hasWindsorCredentials } from "@/lib/windsor";
+import { hasWindsorCredentials } from "@/lib/windsor";
 import { parseRange } from "@/lib/rangeParam";
-import { fetchCampaignsByAccount } from "@/lib/financeCampaigns";
-import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
+import { loadWindsorSpend } from "@/lib/spendData";
+import { staleWarning } from "@/lib/cache";
 import type { SpendResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic"; // la caché es la de lib/cache.ts (explícita, con TTL), no la del framework
@@ -37,30 +37,9 @@ export async function GET(request: Request) {
     // ficticios: o se sirve el último resultado bueno (con aviso) o se
     // responde un error claro.
     try {
-      const range = parsed.range;
-      const result = await cachedWithFallback<SpendResponse>({
-        key: `spend:${parsed.id}`,
-        freshMs: CACHE_FRESH_MS,
-        maxStaleMs: CACHE_MAX_STALE_MS,
-        load: async () => {
-          // Cuentas (presupuesto/real ya existentes) + desglose por campaña
-          // (lib/financeCampaigns.ts, a pedido explícito del usuario) en
-          // paralelo — son 2 fuentes independientes que se mezclan acá, no
-          // una depende de la otra.
-          const [{ clients, warnings: spendWarnings }, { byAccount: campaignsByAccount, warnings: campaignWarnings }] =
-            await Promise.all([fetchWindsorSpend(MOCK_CLIENTS, range), fetchCampaignsByAccount(rangeKey)]);
-          const warnings = [...spendWarnings, ...campaignWarnings];
-          return {
-            source: "windsor",
-            today: range.today,
-            daysInMonth: range.daysInPeriod,
-            clients: clients.map((c) => (c.accountId ? { ...c, campaigns: campaignsByAccount.get(c.accountId) ?? [] } : c)),
-            warnings: warnings.length ? warnings : undefined,
-          } satisfies SpendResponse;
-        },
-        isClean: (r) => r.clients.length > 0 && !hasDegradedWarning(r.warnings),
-        describe: (r) => (r.warnings ?? []).join(" | "),
-      });
+      // La consulta, la caché y el último dato bueno están en lib/spendData.ts
+      // (los comparte la generación de cortes).
+      const result = await loadWindsorSpend(parsed);
 
       if (!result.stale) return NextResponse.json(result.value);
       return NextResponse.json({ ...result.value, warnings: [staleWarning(result.ageMs, result.refreshError)] });
