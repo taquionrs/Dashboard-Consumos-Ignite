@@ -44,3 +44,22 @@ Presets: `today`, `yesterday`, `7d`, `14d`, `28d`, `month`, `lastmonth` (los mis
   "avisos": []
 }
 ```
+
+## Enviar un corte a Superlum — `POST /api/cortes/<id>/enviar`
+
+Manda un corte guardado a Superlum (`/api/integrations/pulso/corte`), que lo valida y lo reenvía al backend financiero, donde queda como **pauta real por cuenta y mes**. En esta etapa **no cambia los números del P&L**. Contrato completo en `docs/integracion-pulso-cortes.md` del repo `superlum-prod`. Botón «Enviar» / «Reenviar» en `/cortes`.
+
+- Para quien tiene la página **Finanzas**. Código: [`lib/enviarCorte.ts`](../../lib/enviarCorte.ts) (firma y lectura de la respuesta) y [`app/api/cortes/[id]/enviar/route.ts`](../../app/api/cortes/[id]/enviar/route.ts).
+- El cuerpo es `{ "evento": "corte.pulso", "enviadoEl": "<ahora>", "corte": { …el corte guardado… } }` y va firmado con `x-pulso-signature: sha256=<HMAC-SHA256 del cuerpo exacto, con PULSO_SHARED_SECRET>`. La hora se pone al enviar: Superlum rechaza un pedido de más de 10 minutos.
+- **Reenviar es seguro:** el backend reconoce el corte por su identificador y no duplica nada. Un corte más nuevo de la misma cuenta y mes reemplaza al anterior; uno más viejo se omite.
+- El resultado del último envío (también si Superlum lo rechaza) se guarda aparte —`pulso:cortes:envios` en Upstash; el corte no se modifica— y se ve en la columna «Envío a Superlum»: cuántas cuentas guardó el backend y cuáles omitió, con el motivo.
+- Antes de enviar, la pantalla avisa (sin impedirlo) si el corte **cruza meses** (el backend lo omite: el P&L es mensual), si no tiene cuentas o si hay cuentas **sin vincular** en Equivalencias.
+
+Respuesta: `{ "ok": true|false, "envio": { enviadoEn, enviadoPor, ok, status, mensaje, aplicadas, omitidas[], advertencias[], reemplaza } }` con estado 200 aunque Superlum lo rechace (el motivo viaja en `envio`). Un error propio de Pulso responde 4xx/5xx con `{ "error": "…" }`:
+
+| Estado | Cuándo |
+|---|---|
+| 400 | identificador de corte inválido |
+| 403 | no tiene la página Finanzas |
+| 404 | el corte no existe |
+| 503 | falta Upstash, falta `PULSO_SHARED_SECRET` (32+ caracteres) o `SUPERLUM_PULSO_URL` no es https |

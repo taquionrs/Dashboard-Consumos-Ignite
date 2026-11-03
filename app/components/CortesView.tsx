@@ -4,17 +4,17 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "./PageChrome";
 import { fetchJson } from "@/lib/clientFetch";
 import type { Session } from "@/lib/access";
-import type { Corte, CorteResumen } from "@/lib/cortesCore";
+import { avisosDeEnvio, type Corte, type CorteListado, type EnvioDeCorte } from "@/lib/cortesCore";
 
 /**
  * Cortes de finanzas: una foto congelada del consumo de pauta de un período
- * (por cuenta y campaña), lista para mandarse a Superlum y al P&L. Acá se genera,
- * se lista y se mira. Datos: /api/cortes.
+ * (por cuenta y campaña), lista para mandarse a Superlum y al backend financiero. Acá se genera,
+ * se lista, se mira y se envía. Datos: /api/cortes y /api/cortes/<id>/enviar.
  */
 
 interface ListResponse {
   configured: boolean;
-  cortes: CorteResumen[];
+  cortes: CorteListado[];
   hayMas: boolean;
 }
 
@@ -45,6 +45,8 @@ export default function CortesView({ session }: { session: Session }) {
   const [genError, setGenError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Corte | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [enviandoId, setEnviandoId] = useState<string | null>(null);
+  const [resultadoEnvio, setResultadoEnvio] = useState<{ id: string; envio: EnvioDeCorte } | null>(null);
 
   function load() {
     fetchJson<ListResponse>("/api/cortes")
@@ -87,9 +89,31 @@ export default function CortesView({ session }: { session: Session }) {
     }
   }
 
+  async function enviar(c: CorteListado) {
+    const avisos = avisosDeEnvio(c);
+    const reenvio = c.envio ? "\n\nYa se envió antes: se vuelve a mandar y el backend no duplica nada." : "";
+    const texto =
+      `¿Enviar el corte ${periodo(c)} a Superlum?\n\nSuperlum lo valida y lo reenvía al backend financiero, que guarda la pauta real de cada cuenta. ` +
+      `No cambia los números del P&L.${reenvio}` +
+      (avisos.length ? `\n\nTené en cuenta:\n- ${avisos.join("\n- ")}` : "");
+    if (!window.confirm(texto)) return;
+    setEnviandoId(c.id);
+    setGenError(null);
+    setResultadoEnvio(null);
+    try {
+      const r = await fetchJson<{ ok: boolean; envio: EnvioDeCorte }>(`/api/cortes/${encodeURIComponent(c.id)}/enviar`, { method: "POST" });
+      setResultadoEnvio({ id: c.id, envio: r.envio });
+      load();
+    } catch (err) {
+      setGenError(clean(err));
+    } finally {
+      setEnviandoId(null);
+    }
+  }
+
   return (
     <div className="wrap">
-      <PageHeader title="Pulso Ignite — Cortes" sub="Foto congelada del consumo de pauta de un período, lista para Superlum y el P&L" session={session} current="cortes" />
+      <PageHeader title="Pulso Ignite — Cortes" sub="Foto congelada del consumo de pauta de un período, lista para Superlum y el backend financiero" session={session} current="cortes" />
 
       {error && (
         <div className="mock-note">
@@ -153,9 +177,13 @@ export default function CortesView({ session }: { session: Session }) {
           <div className="card-head">
             <div>
               <h2>Cortes generados ({list.cortes.length}{list.hayMas ? "+" : ""})</h2>
-              <div className="card-sub">Los más nuevos primero. Si hay dos del mismo período, vale el más nuevo.</div>
+              <div className="card-sub">
+                Los más nuevos primero. Si hay dos del mismo período, vale el más nuevo. «Enviar» manda el corte a Superlum y de ahí al backend financiero; mandar el mismo dos veces no duplica nada.
+              </div>
             </div>
           </div>
+          {resultadoEnvio && <ResultadoDelEnvio envio={resultadoEnvio.envio} onClose={() => setResultadoEnvio(null)} />}
+          {genError && <div className="alert-form-error">{genError}</div>}
           <div className="table-scroll-x">
             <table className="datatable">
               <thead>
@@ -166,6 +194,7 @@ export default function CortesView({ session }: { session: Session }) {
                   <th className="num">Presupuesto</th>
                   <th className="num">Cuentas</th>
                   <th className="num">Sin vincular</th>
+                  <th>Envío a Superlum</th>
                   <th></th>
                 </tr>
               </thead>
@@ -180,16 +209,30 @@ export default function CortesView({ session }: { session: Session }) {
                     <td className="num">{fmtMoney(c.totales.presupuesto)}</td>
                     <td className="num">{c.cuentas}</td>
                     <td className="num">{c.totales.cuentasSinVincular}</td>
-                    <td>
+                    <td style={{ fontSize: 12.5 }}>
+                      {c.envio ? (
+                        <span style={{ color: c.envio.ok ? "var(--text-primary)" : "var(--status-warning)" }}>
+                          {c.envio.ok ? "Enviado" : "Con error"} · {fmtDateTime(c.envio.enviadoEn)}
+                          <br />
+                          <span style={{ color: "var(--text-muted)" }}>{c.envio.mensaje}</span>
+                        </span>
+                      ) : (
+                        <span style={{ color: "var(--text-muted)" }}>Sin enviar</span>
+                      )}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
                       <button className="btn" disabled={loadingId !== null} onClick={() => abrir(c.id)}>
                         {loadingId === c.id ? "Abriendo…" : "Ver"}
+                      </button>{" "}
+                      <button className="btn primary" disabled={enviandoId !== null} onClick={() => enviar(c)}>
+                        {enviandoId === c.id ? "Enviando…" : c.envio ? "Reenviar" : "Enviar"}
                       </button>
                     </td>
                   </tr>
                 ))}
                 {list.cortes.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ color: "var(--text-muted)" }}>
+                    <td colSpan={9} style={{ color: "var(--text-muted)" }}>
                       Todavía no hay cortes. Generá el primero arriba.
                     </td>
                   </tr>
@@ -198,6 +241,38 @@ export default function CortesView({ session }: { session: Session }) {
             </table>
           </div>
         </section>
+      )}
+    </div>
+  );
+}
+
+/** Qué respondió Superlum al último envío: lo que guardó el backend, lo que omitió y por qué. */
+function ResultadoDelEnvio({ envio, onClose }: { envio: EnvioDeCorte; onClose: () => void }) {
+  return (
+    <div className={envio.ok ? "mock-note" : "alert-form-error"} style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <b>{envio.ok ? "Superlum recibió el corte." : "No se pudo enviar el corte."}</b>
+        <button className="btn" onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+      <div>{envio.mensaje}</div>
+      {envio.reemplaza && <div style={{ color: "var(--text-muted)" }}>Reemplaza a un corte anterior del mismo período.</div>}
+      {envio.omitidas.length > 0 && (
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
+          {envio.omitidas.map((o) => (
+            <li key={o.cuenta_id}>
+              Cuenta {o.cuenta_id}: no se guardó ({o.motivo.replace(/_/g, " ")})
+            </li>
+          ))}
+        </ul>
+      )}
+      {envio.advertencias.length > 0 && (
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12.5, color: "var(--text-muted)" }}>
+          {envio.advertencias.map((a, i) => (
+            <li key={i}>{a}</li>
+          ))}
+        </ul>
       )}
     </div>
   );

@@ -128,3 +128,12 @@ La pantalla `/equivalencias` (para quien tiene la página Finanzas) vincula cada
 | `MAESTRO_URL` | No | Por omisión `https://superlum.netlify.app/api/integrations/maestro`. Tiene que ser `https://`. |
 
 Una cuenta se identifica por su ID con solo dígitos (`957-027-5909` y `9570275909` son la misma). El cliente y el proyecto se guardan por su `id` de Superlum, que no cambia si los renombran. Sin `KV_REST_API_*` la pantalla avisa que el registro no está configurado.
+
+## Envío de cortes a Superlum
+
+El botón «Enviar» de `/cortes` firma el corte y lo manda a Superlum (ver [API de cortes](./api-cortes.md#enviar-un-corte-a-superlum--post-apicortesidenviar)).
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `PULSO_SHARED_SECRET` | Sí, para enviar | Secreto compartido con Superlum, de **32 caracteres o más**, aleatorio. **El mismo valor** tiene que estar cargado en Superlum (Netlify): si difieren, todo envío da «Superlum rechazó la firma». **Es una credencial**: solo en el hosting, como *Sensitive*; nunca en el código ni en un chat. Sin ella Pulso responde 503 al enviar y avisa que falta. Los montos viajan en el cuerpo, así que esta firma es la única garantía de que el corte es de Pulso. |
+| `SUPERLUM_PULSO_URL` | No | Por omisión `https://superlum.netlify.app/api/integrations/pulso/corte`. Tiene que ser `https://`. |
