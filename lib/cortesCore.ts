@@ -96,6 +96,39 @@ export interface CorteResumen {
   avisos: number;
 }
 
+/** Lo que se sabe del último envío de un corte a Superlum (guardado aparte: el corte no se edita). */
+export interface EnvioDeCorte {
+  enviadoEn: string;
+  enviadoPor: string;
+  /** true solo si Superlum respondió bien y el backend aceptó el corte. */
+  ok: boolean;
+  /** Estado HTTP de Superlum, o null si no hubo respuesta. */
+  status: number | null;
+  mensaje: string;
+  /** Cuentas que el backend guardó. */
+  aplicadas: number | null;
+  omitidas: { cuenta_id: string; motivo: string }[];
+  advertencias: string[];
+  reemplaza: string | null;
+}
+
+export interface CorteListado extends CorteResumen {
+  envio: EnvioDeCorte | null;
+}
+
+/** Cosas que conviene saber antes de mandar un corte (no lo impiden). */
+export function avisosDeEnvio(r: { desde: string; hasta: string; cuentas: number; totales: { cuentasSinVincular: number } }): string[] {
+  const avisos: string[] = [];
+  if (r.desde.slice(0, 7) !== r.hasta.slice(0, 7)) {
+    avisos.push("Este corte cruza meses: Superlum lo recibe, pero el backend lo va a omitir (el P&L es mensual). Conviene generar un corte por mes calendario.");
+  }
+  if (r.cuentas === 0) avisos.push("Este corte no tiene cuentas.");
+  else if (r.totales.cuentasSinVincular > 0) {
+    avisos.push(`${r.totales.cuentasSinVincular} cuenta(s) sin vincular en Equivalencias: viajan igual, pero el backend no las puede asignar a un proyecto.`);
+  }
+  return avisos;
+}
+
 const ID_RE = /^\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}_\d{14}_[0-9a-f]{4}$/;
 export const esIdDeCorte = (id: unknown): id is string => typeof id === "string" && ID_RE.test(id);
 

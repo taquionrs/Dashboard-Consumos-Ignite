@@ -1,5 +1,5 @@
 import { readStoreConfig, redisPipeline, type Cmd, type StoreConfig } from "./redis";
-import { resumirCorte, type Corte, type CorteResumen } from "./cortesCore";
+import { resumirCorte, type Corte, type CorteListado, type CorteResumen, type EnvioDeCorte } from "./cortesCore";
 
 /**
  * Almacenamiento de los cortes de finanzas (forma y reglas en lib/cortesCore.ts).
@@ -7,15 +7,16 @@ import { resumirCorte, type Corte, type CorteResumen } from "./cortesCore";
  * Upstash Redis (lib/redis.ts), la misma base del registro de usuarios y de equivalencias:
  *   pulso:cortes          hash  id → JSON del Corte completo
  *   pulso:cortes:resumen  hash  id → JSON del CorteResumen (para la lista, sin bajar cada corte entero)
+ *   pulso:cortes:envios   hash  id → JSON del último EnvioDeCorte (el corte en sí no cambia al enviarse)
  *
  * Un corte NO se edita ni se borra desde acá: es una foto. Si hace falta rehacer un
- * período, se genera otro corte y el más nuevo es el vigente (el envío a Superlum
- * elegirá el último de cada período).
+ * período, se genera otro corte y el más nuevo es el vigente (el backend financiero
+ * se queda con el más nuevo de cada cuenta y mes).
  *
  * SOLO SERVER-SIDE.
  */
 
-const K = { full: "pulso:cortes", resumen: "pulso:cortes:resumen" };
+const K = { full: "pulso:cortes", resumen: "pulso:cortes:resumen", envios: "pulso:cortes:envios" };
 const STORE = "registro de cortes";
 /** El pedido REST de Upstash tiene tope de tamaño; se avisa antes de que falle a medias. */
 const MAX_BYTES = 900_000;
@@ -55,14 +56,27 @@ export async function saveCorte(corte: Corte): Promise<void> {
   await pipeline([["HSET", K.resumen, corte.id, JSON.stringify(resumirCorte(corte))]]);
 }
 
-/** Los más nuevos primero, hasta MAX_LISTA. */
-export async function listCortes(): Promise<{ cortes: CorteResumen[]; hayMas: boolean }> {
-  const [all] = await pipeline([["HGETALL", K.resumen]]);
-  const cortes: CorteResumen[] = [];
+/** Guarda el resultado del último envío del corte `id` (el más nuevo reemplaza al anterior). */
+export async function saveEnvio(id: string, envio: EnvioDeCorte): Promise<void> {
+  await pipeline([["HSET", K.envios, id, JSON.stringify(envio)]]);
+}
+
+/** Los más nuevos primero, hasta MAX_LISTA, cada uno con el resultado de su último envío (o null). */
+export async function listCortes(): Promise<{ cortes: CorteListado[]; hayMas: boolean }> {
+  const [all, envios] = await pipeline([
+    ["HGETALL", K.resumen],
+    ["HGETALL", K.envios],
+  ]);
+  const porId = new Map<string, EnvioDeCorte>();
   // HGETALL por REST devuelve [campo, valor, campo, valor, ...].
+  for (let i = 0; Array.isArray(envios) && i < envios.length; i += 2) {
+    const e = parse<EnvioDeCorte>(envios[i + 1]);
+    if (e) porId.set(String(envios[i]), e);
+  }
+  const cortes: CorteListado[] = [];
   for (let i = 0; Array.isArray(all) && i < all.length; i += 2) {
     const r = parse<CorteResumen>(all[i + 1]);
-    if (r) cortes.push(r);
+    if (r) cortes.push({ ...r, envio: porId.get(r.id) ?? null });
   }
   cortes.sort((a, b) => b.generadoEn.localeCompare(a.generadoEn));
   return { cortes: cortes.slice(0, MAX_LISTA), hayMas: cortes.length > MAX_LISTA };
