@@ -4,7 +4,7 @@ import { fetchMetaCampaigns } from "@/lib/windsorMeta";
 import { fetchTiktokCampaigns } from "@/lib/windsorTiktok";
 import { hasWindsorCredentials, type RangeInput, type ResolvedDateRange } from "@/lib/windsor";
 import { parseRange } from "@/lib/rangeParam";
-import { fetchMediaPlanBudgetByCampaign, type MediaPlanTarget } from "@/lib/mediaPlan";
+import { fetchMediaPlanBudgetByCampaign, multiMonthNote, type MediaPlanTarget } from "@/lib/mediaPlan";
 import { budgetKey, normAccountId } from "@/lib/matchKeys";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import { MOCK_CAMPAIGNS } from "@/lib/mockCampaigns";
@@ -122,11 +122,13 @@ export async function GET(request: Request) {
         // lib/financeCampaigns.ts para Finanzas.
         const [{ campaigns, warnings, failed }, budgets] = await Promise.all([
           fetchCampaignsForPlatform(platform, rangeKey),
-          fetchMediaPlanBudgetByCampaign(),
+          fetchMediaPlanBudgetByCampaign(range),
         ]);
         if (failed) throw new Error(warnings.join(" | ") || "Windsor.ai no respondió");
         const withBudget = campaigns.map((c) => ({ ...c, budget: budgets.byCampaign.get(budgetKey(c.accountId, c.campaignName)) ?? 0 }));
         const allWarnings = budgets.warning ? [...warnings, budgets.warning] : [...warnings];
+        const monthsNote = multiMonthNote(budgets.months);
+        if (monthsNote) allWarnings.push(monthsNote);
         // Filas de la hoja de ESTA plataforma que no cruzaron con ninguna campaña: se avisa cuáles y por qué
         // (antes quedaban en "Sin objetivo cargado" sin ninguna pista). Solo con "Este mes", que es el mes del presupuesto.
         if (parsed.isMonth) allWarnings.push(...unmatchedSheetWarnings(platform, budgets.rows, withBudget));

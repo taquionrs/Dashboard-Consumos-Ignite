@@ -40,7 +40,9 @@ Para conectarla, son **2 pasos** en Windsor.ai — los dos hacen falta, no alcan
 
 No hace falta ninguna variable de entorno nueva — usa la misma `WINDSOR_API_KEY`. La consulta en `lib/mediaPlan.ts` sí necesita `date_from`/`date_to` (un año hacia atrás) para traer algo — sin fecha, Windsor devuelve 0 filas aunque la hoja esté bien conectada; las filas de la hoja no tienen una noción de fecha propia, así que un rango amplio no filtra nada real, solo evita que la consulta vuelva vacía.
 
-Sin ninguna fila para una cuenta en el mes en curso, esa cuenta se queda en `$0` / "Sin objetivo cargado" — igual que antes, nunca se inventa un número.
+El presupuesto proyectado es el de los meses del período elegido: "Este mes" → el mes en curso; "Mes anterior" → ese mes (si la hoja todavía tiene sus filas); un rango propio que abarca dos meses suma los dos presupuestos mensuales completos (sin prorratear) y la pantalla avisa. Un mes cuenta si el período cubre al menos la mitad de sus días; los períodos cortos que cruzan un cambio de mes (ej. "7 días" el día 3) usan el mes en el que terminan. Reglas en `budgetMonthsFor` de `lib/mediaPlan.ts`.
+
+Sin ninguna fila para una cuenta en esos meses, esa cuenta se queda en `$0` / "Sin objetivo cargado" — igual que antes, nunca se inventa un número.
 
 Esas cuentas reales todavía no tienen presupuesto cargado (no hay media plan asociado) — "Presupuesto proyectado" sale en `$0` y el estado en "Sin objetivo cargado" hasta que exista ese dato (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)).
 

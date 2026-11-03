@@ -1,5 +1,5 @@
 import type { FinanceCampaignRow } from "./types";
-import type { RangeInput } from "./windsor";
+import { resolveDateRange, type RangeInput } from "./windsor";
 import { fetchGoogleAdsCampaigns } from "./windsorCampaigns";
 import { fetchMetaCampaigns } from "./windsorMeta";
 import { fetchTiktokCampaigns } from "./windsorTiktok";
@@ -38,7 +38,7 @@ export async function fetchCampaignsByAccount(
     fetchGoogleAdsCampaigns(rangeKey),
     fetchMetaCampaigns(rangeKey),
     fetchTiktokCampaigns(rangeKey),
-    fetchMediaPlanBudgetByCampaign(),
+    fetchMediaPlanBudgetByCampaign(resolveDateRange(rangeKey)),
   ]);
   warnings.push(...google.warnings, ...meta.warnings, ...tiktok.warnings);
   if (budgets.warning) warnings.push(budgets.warning);

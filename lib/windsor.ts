@@ -1,5 +1,5 @@
 import type { ClientData, PlatformKey } from "./types";
-import { fetchMediaPlanBudgetByAccount } from "./mediaPlan";
+import { fetchMediaPlanBudgetByAccount, multiMonthNote } from "./mediaPlan";
 import { normAccountId } from "./matchKeys";
 import { fetchWindsorRows } from "./windsorFetch";
 
@@ -338,15 +338,17 @@ export async function fetchWindsorSpend(
 ): Promise<{ clients: ClientData[]; warnings: string[] }> {
   const warnings: string[] = [];
 
-  // Presupuesto proyectado (media plan) por cuenta, del mes en curso — sale
+  // Presupuesto proyectado (media plan) por cuenta, de los meses del período elegido (por defecto el mes en curso) — sale
   // de la hoja maestra de proyectados vía el connector "googlesheets" de
   // Windsor (ver lib/mediaPlan.ts). Se pide una sola vez, no por plataforma:
   // la hoja mezcla las 3 en las mismas filas.
-  const [{ byAccount: budgetByAccount, warning: mediaPlanWarning }, ...discovered] = await Promise.all([
-    fetchMediaPlanBudgetByAccount(),
+  const [{ byAccount: budgetByAccount, months: budgetMonths, warning: mediaPlanWarning }, ...discovered] = await Promise.all([
+    fetchMediaPlanBudgetByAccount(metricRange),
     ...PLATFORM_SOURCES.map((source) => discoverPlatformAccounts(source, warnings, metricRange)),
   ]);
   if (mediaPlanWarning) warnings.push(mediaPlanWarning);
+  const monthsNote = multiMonthNote(budgetMonths);
+  if (monthsNote) warnings.push(monthsNote);
 
   const usedByMock = new Set<string>(); // "platformKey:accountId" ya aplicado a un mock client
   let updatedMockClients: ClientData[] = baseClients;
