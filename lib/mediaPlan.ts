@@ -1,5 +1,6 @@
 import type { PlatformKey } from "./types";
 import { budgetKey, normAccountId } from "./matchKeys";
+import { cargarProyectados, currentMonthKey } from "./proyectadoHistorial";
 
 /**
  * Lee los objetivos de inversión (media plan) desde la "Hoja maestra de
@@ -114,6 +115,23 @@ export function monthLabel(key: string): string {
 export function multiMonthNote(months: string[]): string | undefined {
   if (months.length < 2) return undefined;
   return `El período abarca ${months.length} meses: el presupuesto proyectado suma los presupuestos mensuales completos de ${months.length === 2 ? `${monthLabel(months[0])} y ${monthLabel(months[1])}` : `${monthLabel(months[0])} a ${monthLabel(months[months.length - 1])}`}.`;
+}
+
+/**
+ * Filas de la hoja y fotos guardadas (lib/proyectadoHistorial.ts) para los meses pedidos. Un mes que ya pasó y tiene foto se toma
+ * de la foto (lo que se proyectó entonces, aunque después se haya editado o borrado en la hoja); el mes en curso, los futuros y los
+ * pasados sin foto salen de la hoja. Si la hoja falló pero todos los meses pedidos tienen foto, no hace falta la hoja.
+ */
+async function targetsFor(months: string[], now: Date): Promise<{ targets: MediaPlanTarget[]; warning?: string }> {
+  const actual = currentMonthKey(now);
+  const [sheet, snaps] = await Promise.all([fetchMediaPlanTargets(), cargarProyectados(months.filter((m) => m < actual))]);
+  if (sheet.warning && months.some((m) => !snaps.has(m))) return { targets: [], warning: sheet.warning };
+  const fromSheet = sheet.targets.filter((t) => {
+    const m = inMonths(t.mes, months);
+    return m !== undefined && !snaps.has(m);
+  });
+  const fromSnaps = [...snaps.entries()].flatMap(([mes, filas]) => filas.map((f) => ({ ...f, mes })));
+  return { targets: [...fromSheet, ...fromSnaps] };
 }
 
 /** La hoja acepta "2026-09" y "2026-09-01" como valor de mes. */
@@ -236,7 +254,7 @@ export async function fetchMediaPlanBudgetByAccount(
   now: Date = new Date()
 ): Promise<{ byAccount: Map<string, number>; months: string[]; warning?: string }> {
   const months = budgetMonthsFor(period, now);
-  const { targets, warning } = await fetchMediaPlanTargets();
+  const { targets, warning } = await targetsFor(months, now);
   if (warning) return { byAccount: new Map(), months, warning };
 
   const byAccount = new Map<string, number>();
@@ -291,7 +309,7 @@ export async function fetchMediaPlanBudgetByCampaign(
   now: Date = new Date()
 ): Promise<{ byCampaign: Map<string, number>; rows: MediaPlanTarget[]; months: string[]; warning?: string }> {
   const months = budgetMonthsFor(period, now);
-  const { targets, warning } = await fetchMediaPlanTargets();
+  const { targets, warning } = await targetsFor(months, now);
   if (warning) return { byCampaign: new Map(), rows: [], months, warning };
 
   const byCampaign = new Map<string, number>();

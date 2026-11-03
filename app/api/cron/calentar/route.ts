@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { cronAuthorized } from "@/lib/cronAuth";
 import { hasWindsorCredentials } from "@/lib/windsor";
 import { runDailyMetaReview } from "@/lib/metaAuditRun";
+import { fetchMediaPlanTargets } from "@/lib/mediaPlan";
+import { guardarProyectados } from "@/lib/proyectadoHistorial";
 import { GET as getSpend } from "@/app/api/spend/route";
 import { GET as getCampaigns } from "@/app/api/campaigns/route";
 import { GET as getAds } from "@/app/api/ads/route";
@@ -31,10 +33,25 @@ export const maxDuration = 300;
  * GET /api/cron/calentar?soloMeta=1&dryRun=1 → igual, pero no envía ni guarda nada: devuelve el mensaje.
  * GET /api/cron/calentar?meta=1       → calienta Windsor y además revisa Meta.
  *
+ * HISTORIAL DEL PROYECTADO (lib/proyectadoHistorial.ts): además de calentar, guarda una foto del presupuesto proyectado de cada mes que
+ * tenga filas en la hoja. El mes en curso se actualiza todos los días; cuando el mes termina queda congelado, y Pulso lo usa para
+ * "Mes anterior" aunque después se edite o borre la hoja. Se informa en `proyectado` de la respuesta.
+ *
  * Plan Hobby de Vercel: un cron corre como máximo una vez por día, y dentro de la hora indicada.
  */
 
 const BASE = "http://calentamiento.local";
+
+async function guardarProyectado() {
+  try {
+    const { targets, warning } = await fetchMediaPlanTargets();
+    if (warning) return { ok: false, error: warning.slice(0, 200) };
+    const r = await guardarProyectados(targets);
+    return { ok: true, ...r };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message || err).slice(0, 200) };
+  }
+}
 
 const CALLS: { name: string; run: () => Promise<Response> }[] = [
   { name: "finanzas", run: () => getSpend(new Request(`${BASE}/api/spend?range=month`)) },
@@ -61,6 +78,7 @@ export async function GET(request: Request) {
   const runMeta = onlyMeta || params.get("meta") === "1" || process.env.META_DAILY_REVIEW === "1";
   const skipped = { configured: true, ok: true, found: 0, newCount: 0, sent: 0, pixelCheck: false, skipped: true as const };
   const metaPromise = (runMeta ? runDailyMetaReview({ dryRun }) : Promise.resolve(skipped)).catch((err: any) => ({ configured: true, ok: false, found: 0, newCount: 0, sent: 0, pixelCheck: false, error: String(err?.message || err) }));
+  const proyectadoPromise = warm ? guardarProyectado() : Promise.resolve(null);
   const results = await Promise.all(
     (warm ? CALLS : []).map(async ({ name, run }) => {
       const start = Date.now();
@@ -77,12 +95,14 @@ export async function GET(request: Request) {
   );
 
   const meta = await metaPromise;
+  const proyectado = await proyectadoPromise;
   const failed = results.filter((r) => !r.ok);
   return NextResponse.json({
-    ok: failed.length === 0 && meta.ok,
+    ok: failed.length === 0 && meta.ok && (proyectado?.ok ?? true),
     totalSeconds: Math.round((Date.now() - t0) / 100) / 10,
     failed: failed.map((r) => r.name),
     results,
     metaReview: meta,
+    proyectado,
   });
 }
