@@ -71,11 +71,54 @@ export interface MediaPlanTarget {
   presupuesto: number;
 }
 
-/** "2026-09" y "2026-09-01" — los 2 formatos de mes que aceptamos en la hoja. */
-function currentMonthKeys(now: Date): string[] {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  return [`${y}-${m}`, `${y}-${m}-01`];
+/** Período para el que se pide el presupuesto: solo hacen falta las fechas (rango ya resuelto). */
+export interface BudgetPeriod {
+  dateFrom: string;
+  dateTo: string;
+}
+
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+function daysInMonth(y: number, m: number): number {
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/**
+ * Meses ("AAAA-MM") cuyo presupuesto mensual corresponde al período elegido.
+ * - Sin período: el mes en curso (lo que se hacía antes de poder mirar meses pasados).
+ * - Un mes cuenta si el período cubre al menos la mitad de sus días: "Mes anterior" → ese mes; del 15/10 al 15/11 →
+ *   octubre y noviembre (se suman los dos presupuestos completos, sin prorratear). Los períodos cortos que cruzan un
+ *   cambio de mes (ej. "7 días" el 3/11) no cubren la mitad de ninguno: se usa el mes en el que termina el período.
+ */
+export function budgetMonthsFor(period?: BudgetPeriod, now: Date = new Date()): string[] {
+  if (!period) return [`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`];
+  const [fy, fm, fd] = period.dateFrom.split("-").map(Number);
+  const [ty, tm, td] = period.dateTo.split("-").map(Number);
+  const months: string[] = [];
+  for (let y = fy, m = fm; y < ty || (y === ty && m <= tm); m === 12 ? (y++, (m = 1)) : m++) {
+    const len = daysInMonth(y, m);
+    const from = y === fy && m === fm ? fd : 1;
+    const to = y === ty && m === tm ? td : len;
+    if ((to - from + 1) * 2 >= len) months.push(`${y}-${String(m).padStart(2, "0")}`);
+  }
+  return months.length ? months : [`${ty}-${String(tm).padStart(2, "0")}`];
+}
+
+/** "octubre 2026" para avisos. */
+export function monthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return `${MESES[m - 1]} ${y}`;
+}
+
+/** Aviso cuando el proyectado suma más de un mes (si es un solo mes no hace falta decir nada). */
+export function multiMonthNote(months: string[]): string | undefined {
+  if (months.length < 2) return undefined;
+  return `El período abarca ${months.length} meses: el presupuesto proyectado suma los presupuestos mensuales completos de ${months.length === 2 ? `${monthLabel(months[0])} y ${monthLabel(months[1])}` : `${monthLabel(months[0])} a ${monthLabel(months[months.length - 1])}`}.`;
+}
+
+/** La hoja acepta "2026-09" y "2026-09-01" como valor de mes. */
+function inMonths(mes: string, months: string[]): string | undefined {
+  return months.find((m) => mes === m || mes === `${m}-01`);
 }
 
 /**
@@ -189,43 +232,49 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
  * Sin ninguna fila por campaña, se usa la fila de cuenta como siempre.
  */
 export async function fetchMediaPlanBudgetByAccount(
+  period?: BudgetPeriod,
   now: Date = new Date()
-): Promise<{ byAccount: Map<string, number>; warning?: string }> {
+): Promise<{ byAccount: Map<string, number>; months: string[]; warning?: string }> {
+  const months = budgetMonthsFor(period, now);
   const { targets, warning } = await fetchMediaPlanTargets();
-  if (warning) return { byAccount: new Map(), warning };
-
-  const monthKeys = currentMonthKeys(now);
-  const relevant = targets.filter((t) => monthKeys.includes(t.mes));
+  if (warning) return { byAccount: new Map(), months, warning };
 
   const byAccount = new Map<string, number>();
-  const accountsWithCampaignBudget = new Set<string>();
-  relevant.forEach((t) => {
-    const acct = normAccountId(t.cuenta);
-    if (t.campana) {
-      byAccount.set(acct, (byAccount.get(acct) ?? 0) + t.presupuesto);
-      accountsWithCampaignBudget.add(acct);
-    }
-  });
-  relevant.forEach((t) => {
-    const acct = normAccountId(t.cuenta);
-    if (!t.campana && !accountsWithCampaignBudget.has(acct)) {
-      byAccount.set(acct, t.presupuesto);
-    }
-  });
+  for (const month of months) {
+    const relevant = targets.filter((t) => inMonths(t.mes, [month]));
+    const monthly = new Map<string, number>();
+    const accountsWithCampaignBudget = new Set<string>();
+    relevant.forEach((t) => {
+      const acct = normAccountId(t.cuenta);
+      if (t.campana) {
+        monthly.set(acct, (monthly.get(acct) ?? 0) + t.presupuesto);
+        accountsWithCampaignBudget.add(acct);
+      }
+    });
+    relevant.forEach((t) => {
+      const acct = normAccountId(t.cuenta);
+      if (!t.campana && !accountsWithCampaignBudget.has(acct)) {
+        monthly.set(acct, t.presupuesto);
+      }
+    });
+    monthly.forEach((v, acct) => byAccount.set(acct, (byAccount.get(acct) ?? 0) + v));
+  }
 
-  // Hay filas leídas, pero ninguna es del mes actual — la sospecha más
+  // Hay filas leídas, pero ninguna es de los meses pedidos — la sospecha más
   // probable es que Google Sheets no se sincroniza en vivo en cada request
   // (como el resto de los connectors de Windsor, en el plan Basic es una
   // vez al día): si se acaba de editar la hoja, puede tardar en reflejarse.
   if (byAccount.size === 0) {
     const mesesEncontrados = [...new Set(targets.map((t) => t.mes))].filter(Boolean);
+    const esperado = months.map(monthLabel).join(" y ");
     return {
       byAccount,
-      warning: `Hoja de proyectados: se leyeron ${targets.length} fila(s) de Windsor.ai, pero ninguna es del mes actual (se esperaba "${monthKeys[0]}"). Meses encontrados en la hoja: ${mesesEncontrados.join(", ") || "ninguno"}. Si la hoja se editó recién, puede ser que Windsor todavía no resincronizó.`,
+      months,
+      warning: `Hoja de proyectados: se leyeron ${targets.length} fila(s) de Windsor.ai, pero ninguna es del período pedido (se esperaba ${esperado}: "${months.join('", "')}"). Meses encontrados en la hoja: ${mesesEncontrados.join(", ") || "ninguno"}. Si la hoja se editó recién, puede ser que Windsor todavía no resincronizó.`,
     };
   }
 
-  return { byAccount };
+  return { byAccount, months };
 }
 
 /**
@@ -238,21 +287,26 @@ export async function fetchMediaPlanBudgetByAccount(
  * muestra en $0 / "Sin objetivo cargado" en la UI, no es un error).
  */
 export async function fetchMediaPlanBudgetByCampaign(
+  period?: BudgetPeriod,
   now: Date = new Date()
-): Promise<{ byCampaign: Map<string, number>; rows: MediaPlanTarget[]; warning?: string }> {
+): Promise<{ byCampaign: Map<string, number>; rows: MediaPlanTarget[]; months: string[]; warning?: string }> {
+  const months = budgetMonthsFor(period, now);
   const { targets, warning } = await fetchMediaPlanTargets();
-  if (warning) return { byCampaign: new Map(), rows: [], warning };
+  if (warning) return { byCampaign: new Map(), rows: [], months, warning };
 
-  const monthKeys = currentMonthKeys(now);
   const byCampaign = new Map<string, number>();
   const rows: MediaPlanTarget[] = [];
-  targets.forEach((t) => {
-    if (t.campana && monthKeys.includes(t.mes)) {
-      byCampaign.set(budgetKey(t.cuenta, t.campana), t.presupuesto);
-      rows.push(t);
-    }
-  });
+  for (const month of months) {
+    const monthly = new Map<string, number>();
+    targets.forEach((t) => {
+      if (t.campana && inMonths(t.mes, [month])) {
+        monthly.set(budgetKey(t.cuenta, t.campana), t.presupuesto);
+        rows.push(t);
+      }
+    });
+    monthly.forEach((v, k) => byCampaign.set(k, (byCampaign.get(k) ?? 0) + v));
+  }
 
-  // `rows`: las filas por campaña del mes, para avisar cuáles no cruzaron con ninguna campaña (ver app/api/campaigns).
-  return { byCampaign, rows };
+  // `rows`: las filas por campaña del período, para avisar cuáles no cruzaron con ninguna campaña (ver app/api/campaigns).
+  return { byCampaign, rows, months };
 }

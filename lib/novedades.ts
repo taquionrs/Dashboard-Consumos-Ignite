@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-03-proyectado-por-mes",
+    fecha: "2026-11-03",
+    tipo: "arreglo",
+    area: "finanzas",
+    titulo: "El proyectado ahora sigue al período elegido",
+    detalle:
+      "Al mirar el mes anterior, el presupuesto proyectado (general y por campaña) mostraba el del mes en curso. Ahora se toma el del mes que estás viendo. Si el período abarca dos meses (por ejemplo del 15/10 al 15/11) se suman los dos presupuestos mensuales completos y se avisa en pantalla.",
+    ruta: "/",
+  },
+  {
     id: "2026-10-22-costo-por-seguidor",
     fecha: "2026-10-22",
     tipo: "nuevo",
