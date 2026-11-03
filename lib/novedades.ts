@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-03-historial-proyectado",
+    fecha: "2026-11-03",
+    tipo: "mejora",
+    area: "finanzas",
+    titulo: "Pulso guarda el proyectado de cada mes",
+    detalle:
+      "Todos los días Pulso guarda una foto del presupuesto proyectado de la hoja. Cuando el mes termina queda congelada: aunque después se edite o se borre la hoja, al mirar un mes anterior se ve lo que se proyectó en ese momento. El historial empieza desde hoy.",
+    ruta: "/",
+  },
+  {
     id: "2026-11-03-proyectado-por-mes",
     fecha: "2026-11-03",
     tipo: "arreglo",
