@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-25-cuentas",
+    fecha: "2026-11-25",
+    tipo: "nuevo",
+    area: "finanzas",
+    titulo: "Cuentas: el gasto por marca, ocasión y objetivo",
+    detalle:
+      "Pantalla nueva, Cuentas, para quien tiene Finanzas. Ordena el gasto real de Meta por marca, por ocasión (Asado del Domingo, Halloween, Cyber Monday...) y por objetivo (awareness, consideración, conversión), leyendo el nombre de cada campaña. Además se carga el presupuesto del año por línea (EPA!, Torpedo, Conversión...) y Pulso muestra cuánto se ejecutó, el porcentaje y el saldo. Por ahora es solo Meta. Las campañas con más de una marca van aparte como Multimarca, y las que no siguen la convención de nombre se listan para revisarlas.",
+    ruta: "/cuentas",
+  },
+  {
     id: "2026-11-03-historial-proyectado",
     fecha: "2026-11-03",
     tipo: "mejora",

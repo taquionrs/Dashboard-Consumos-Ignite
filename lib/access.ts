@@ -47,6 +47,10 @@ const EQUIVALENCIAS_API = "/api/equivalencias";
 export const CORTES_PATH = "/cortes";
 const CORTES_API = "/api/cortes";
 
+/** Cuentas (gasto por marca, ocasión y objetivo contra el presupuesto del año): también para quien tiene la página Finanzas. */
+export const CUENTAS_PATH = "/cuentas";
+const CUENTAS_API = "/api/cuentas";
+
 /**
  * Únicas rutas sin SSO: las llama un cron de vercel.json, no una persona, y
  * cada una se protege sola con `Authorization: Bearer <CRON_SECRET>` (ver
@@ -79,6 +83,7 @@ export function requiredAccess(pathname: string): PageKey | "admin" | "any" | "d
   }
   if (underPath(pathname, EQUIVALENCIAS_PATH) || underPath(pathname, EQUIVALENCIAS_API)) return "finanzas";
   if (underPath(pathname, CORTES_PATH) || underPath(pathname, CORTES_API)) return "finanzas";
+  if (underPath(pathname, CUENTAS_PATH) || underPath(pathname, CUENTAS_API)) return "finanzas";
   if (underPath(pathname, USERS_PATH) || underPath(pathname, USERS_API)) return "admin";
   return pathname.startsWith("/api/") ? "deny" : "any";
 }
