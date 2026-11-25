@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "./PageChrome";
+import { ErrorPanel, LoadingPanel } from "./StatusUI";
 import { fetchJson } from "@/lib/clientFetch";
 import type { Session } from "@/lib/access";
 import { CATEGORIAS_GASTO, MARCAS_CONOCIDAS, SIN_CLASIFICAR, type GastoManual, type Grupo, type Linea, type LineaConEjecucion, type PresupuestoAnual, type Resumen } from "@/lib/cuentasCore";
@@ -39,7 +40,7 @@ const TZ = "America/Argentina/Buenos_Aires";
 const fmtDay = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("es-AR", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString("es-AR", { timeZone: TZ, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const fmtMoney = (n: number | null) => (n === null ? "—" : n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }));
-const fmtNum = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+const fmtNum = (n: number | null | undefined) => (typeof n === "number" && Number.isFinite(n) ? n : 0).toLocaleString("es-AR", { maximumFractionDigits: 0 });
 const fmtPct = (n: number | null) => (n === null ? "—" : `${n.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`);
 const clean = (err: any) => String(err?.message || err).replace(/^HTTP \d+ — /, "");
 const muted = { color: "var(--text-muted)" } as const;
@@ -128,16 +129,8 @@ export default function CuentasView({ session }: { session: Session }) {
         )}
       </section>
 
-      {loading && (
-        <div className="mock-note">
-          <span>Consultando Windsor… puede tardar hasta un minuto.</span>
-        </div>
-      )}
-      {error && (
-        <div className="mock-note">
-          <span className="tq-arrow" style={{ color: "var(--status-warning)" }}>↘</span> <span>{error}</span>
-        </div>
-      )}
+      {loading && <LoadingPanel what="el gasto por marca, ocasión y objetivo" />}
+      {error && <ErrorPanel what="la pantalla Cuentas" detail={error} onRetry={cargar} />}
       {data?.warnings?.map((w, i) => (
         <div key={i} className="mock-note">
           <span className="tq-arrow" style={{ color: "var(--status-warning)" }}>↘</span> <span>{w}</span>

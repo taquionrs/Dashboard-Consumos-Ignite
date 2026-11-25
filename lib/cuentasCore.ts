@@ -131,12 +131,15 @@ export interface Resumen {
 
 const vacio = (nombre: string): Grupo => ({ nombre, gasto: 0, impresiones: 0, clics: 0, conversiones: 0, alcance: 0, campanas: 0 });
 
+/** Windsor a veces trae una métrica vacía o con texto: cuenta como cero (un NaN rompería el JSON y la pantalla). */
+const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
 function sumar(g: Grupo, c: CampaignRow) {
-  g.gasto += c.spend;
-  g.impresiones += c.impressions;
-  g.clics += c.clicks;
-  g.conversiones += c.conversions;
-  g.alcance += c.reach ?? 0;
+  g.gasto += num(c.spend);
+  g.impresiones += num(c.impressions);
+  g.clics += num(c.clicks);
+  g.conversiones += num(c.conversions);
+  g.alcance += num(c.reach);
   g.campanas += 1;
 }
 
