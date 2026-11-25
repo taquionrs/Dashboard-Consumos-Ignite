@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-25-cuentas-metas",
+    fecha: "2026-11-25",
+    tipo: "mejora",
+    area: "finanzas",
+    titulo: "Cuentas: metas del plan de medios contra lo real",
+    detalle:
+      "En Cuentas, cada línea del presupuesto puede tener metas del plan de medios: impresiones, alcance y CPM de referencia. Pulso las compara con lo que midió Meta para las marcas de esa línea y muestra el cumplimiento. El alcance es aproximado (suma el de cada campaña) y el CPM se lee al revés: menos es mejor.",
+    ruta: "/cuentas",
+  },
+  {
     id: "2026-11-25-cuentas-gastos-a-mano",
     fecha: "2026-11-25",
     tipo: "mejora",
