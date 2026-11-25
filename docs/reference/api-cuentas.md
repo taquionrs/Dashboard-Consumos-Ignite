@@ -12,6 +12,10 @@ Responde el gasto real de **Meta** (vía Windsor) ordenado por marca, ocasión y
 
 Guarda el presupuesto del año: `{ inicio: "AAAA-MM-DD", lineas: [{ id?, nombre, monto, marcas[] }] }`. Queda en Upstash Redis (`pulso:cuentas:presupuesto`) con auditoría de quién lo cambió (`pulso:cuentas:presupuesto:audit`, las últimas 100).
 
+## `POST` / `PUT` / `DELETE /api/cuentas/gastos`
+
+Gastos fuera de las plataformas (UGC, envíos, shooting, influencers, otros). Cada uno es `{ fecha, lineaId, categoria, detalle, campana?, monto }` y cuenta contra una línea del presupuesto (por eso el presupuesto tiene que estar cargado). `PUT` lleva además `id`; `DELETE` usa `?id=`. Se guardan en Upstash Redis (`pulso:cuentas:gastos`) con auditoría (`pulso:cuentas:gastos:audit`, las últimas 200). La lista del período vuelve dentro de `GET /api/cuentas` (`gastos` y `gastosPorCampana`), y su suma entra en el ejecutado de cada línea (`aMano` muestra la parte cargada a mano).
+
 ## Cómo se clasifica
 
 Se lee el nombre de la campaña (`lib/cuentasCore.ts`, `clasificarCampana`):
@@ -27,4 +31,4 @@ Una campaña multimarca no se reparte entre sus marcas: para eso hace falta ver 
 
 ## Pendiente (próximos pasos)
 
-Gasto fuera de plataformas (UGC, envíos, shooting), metas del plan de medios (impresiones, alcance, frecuencia), TikTok / YouTube / programmatic, y las visitas a Rappi y PedidosYa como resultado.
+Metas del plan de medios (impresiones, alcance, frecuencia), TikTok / YouTube / programmatic, y las visitas a Rappi y PedidosYa como resultado.

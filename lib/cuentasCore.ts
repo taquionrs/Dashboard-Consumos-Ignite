@@ -196,30 +196,91 @@ export interface PresupuestoAnual {
 }
 
 export interface LineaConEjecucion extends Linea {
-  /** null = línea sin marcas (no sale de las plataformas). */
-  ejecutado: number | null;
-  /** 0–100; null si no hay ejecutado o el monto es 0. */
+  /** Gasto de las plataformas (marcas de la línea) más lo cargado a mano. */
+  ejecutado: number;
+  /** De ese total, lo cargado a mano (UGC, envíos, shooting...). */
+  aMano: number;
+  /** 0–100; null si el monto es 0. */
   pct: number | null;
-  saldo: number | null;
+  saldo: number;
 }
 
-export function ejecucionPorLinea(lineas: Linea[], porMarca: Grupo[]): { lineas: LineaConEjecucion[]; sinAsignar: number } {
+export function ejecucionPorLinea(lineas: Linea[], porMarca: Grupo[], gastos: GastoManual[] = []): { lineas: LineaConEjecucion[]; sinAsignar: number } {
   const gastoMarca = new Map(porMarca.map((g) => [g.nombre, g.gasto]));
   const usadas = new Set<string>();
   const out = lineas.map((l) => {
-    if (l.marcas.length === 0) return { ...l, ejecutado: null, pct: null, saldo: null };
-    let ejecutado = 0;
+    let plataformas = 0;
     for (const m of l.marcas) {
       // Una marca en dos líneas se contaría dos veces: solo cuenta la primera.
       if (usadas.has(m)) continue;
       usadas.add(m);
-      ejecutado += gastoMarca.get(m) ?? 0;
+      plataformas += gastoMarca.get(m) ?? 0;
     }
-    return { ...l, ejecutado, pct: l.monto > 0 ? (ejecutado / l.monto) * 100 : null, saldo: l.monto - ejecutado };
+    const aMano = gastos.filter((g) => g.lineaId === l.id).reduce((s, g) => s + g.monto, 0);
+    const ejecutado = plataformas + aMano;
+    return { ...l, ejecutado, aMano, pct: l.monto > 0 ? (ejecutado / l.monto) * 100 : null, saldo: l.monto - ejecutado };
   });
   let sinAsignar = 0;
   for (const g of porMarca) if (!usadas.has(g.nombre)) sinAsignar += g.gasto;
   return { lineas: out, sinAsignar };
+}
+
+// ---------------------------------------------------------------------------
+// Gastos fuera de las plataformas (UGC, envíos, shooting...)
+// ---------------------------------------------------------------------------
+
+export const CATEGORIAS_GASTO = ["UGC", "Envío", "Shooting", "Influencer", "Otro"] as const;
+export type CategoriaGasto = (typeof CATEGORIAS_GASTO)[number];
+
+export interface GastoManual {
+  id: string;
+  /** Día del gasto (AAAA-MM-DD). */
+  fecha: string;
+  /** Línea del presupuesto a la que cuenta. */
+  lineaId: string;
+  categoria: CategoriaGasto;
+  /** Qué se pagó y a quién (ej. «Pago UGC - cafeyroma»). */
+  detalle: string;
+  /** Campaña o acción a la que pertenece, en texto libre (ej. «Oreo Bites Mundial»); puede ir vacío. */
+  campana: string;
+  monto: number;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/** Valida un gasto que llega del navegador. `lineaIds` = las líneas del presupuesto cargado. */
+export function validarGasto(raw: unknown, lineaIds: string[]): Omit<GastoManual, "id" | "updatedAt" | "updatedBy"> | { error: string } {
+  if (!raw || typeof raw !== "object") return { error: "Falta el gasto." };
+  const r = raw as Record<string, unknown>;
+  const fecha = typeof r.fecha === "string" ? r.fecha : "";
+  if (!FECHA.test(fecha) || Number.isNaN(Date.parse(fecha + "T12:00:00Z"))) return { error: "La fecha del gasto no es válida (AAAA-MM-DD)." };
+  const lineaId = typeof r.lineaId === "string" ? r.lineaId : "";
+  if (!lineaIds.includes(lineaId)) return { error: "Elegí una línea del presupuesto." };
+  const categoria = r.categoria as CategoriaGasto;
+  if (!(CATEGORIAS_GASTO as readonly string[]).includes(categoria)) return { error: "Elegí una categoría." };
+  const detalle = typeof r.detalle === "string" ? r.detalle.trim() : "";
+  if (!detalle || detalle.length > 120) return { error: "Escribí qué se pagó (hasta 120 caracteres)." };
+  const campana = typeof r.campana === "string" ? r.campana.trim() : "";
+  if (campana.length > 60) return { error: "La campaña puede tener hasta 60 caracteres." };
+  const monto = Number(r.monto);
+  if (!Number.isFinite(monto) || monto <= 0 || monto > 1e12) return { error: "El monto tiene que ser mayor a cero." };
+  return { fecha, lineaId, categoria, detalle, campana, monto: Math.round(monto * 100) / 100 };
+}
+
+/** Gastos cuyo día cae dentro del período (ambos extremos incluidos). */
+export const gastosDelPeriodo = (gastos: GastoManual[], desde: string, hasta: string) => gastos.filter((g) => g.fecha >= desde && g.fecha <= hasta);
+
+/** Total por campaña (texto libre), para ver cuánto se gastó fuera de plataformas en cada acción. */
+export function gastosPorCampana(gastos: GastoManual[]): { campana: string; monto: number; gastos: number }[] {
+  const m = new Map<string, { campana: string; monto: number; gastos: number }>();
+  for (const g of gastos) {
+    const k = g.campana || "Sin campaña";
+    const e = m.get(k) ?? { campana: k, monto: 0, gastos: 0 };
+    e.monto += g.monto;
+    e.gastos += 1;
+    m.set(k, e);
+  }
+  return [...m.values()].sort((a, b) => b.monto - a.monto);
 }
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;

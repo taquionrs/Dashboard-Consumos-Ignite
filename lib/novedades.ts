@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-25-cuentas-gastos-a-mano",
+    fecha: "2026-11-25",
+    tipo: "mejora",
+    area: "finanzas",
+    titulo: "Cuentas: gastos fuera de las plataformas",
+    detalle:
+      "En Cuentas ahora se cargan a mano los gastos que no salen de Meta (pagos a creadores de contenido, envíos, shooting). Cada uno cuenta contra una línea del presupuesto, así Activaciones y Shooting dejan de aparecer vacíos y el ejecutado y el saldo suman todo. Se pueden editar y borrar, y queda registrado quién lo hizo. También se ve el total por campaña (por ejemplo, cuánto se gastó en creadores en Primavera).",
+    ruta: "/cuentas",
+  },
+  {
     id: "2026-11-25-cuentas",
     fecha: "2026-11-25",
     tipo: "nuevo",

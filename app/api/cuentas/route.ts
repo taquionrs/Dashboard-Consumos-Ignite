@@ -6,7 +6,8 @@ import { fetchMetaCampaigns } from "@/lib/windsorMeta";
 import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import { readStoreConfig } from "@/lib/redis";
 import { CUENTAS_NOT_CONFIGURED, CuentasError, getPresupuesto, listAudit, savePresupuesto } from "@/lib/cuentas";
-import { ejecucionPorLinea, resumir, validarPresupuesto } from "@/lib/cuentasCore";
+import { ejecucionPorLinea, gastosDelPeriodo, gastosPorCampana, resumir, validarPresupuesto } from "@/lib/cuentasCore";
+import { listGastos } from "@/lib/cuentasGastos";
 import { normAccountId } from "@/lib/matchKeys";
 import type { CampaignRow } from "@/lib/types";
 
@@ -18,7 +19,7 @@ export const maxDuration = 90; // ver WINDSOR_TIMEOUT_MS en lib/windsorFetch.ts
  * lo exige middleware.ts y se vuelve a verificar acá.
  *
  * GET ?range=…[&from=…&to=…][&cuenta=<accountId>]
- *   → gasto real de Meta del período ordenado por marca, ocasión y objetivo, y la ejecución de cada línea
+ *   → gastos cargados a mano del período (`gastos`, ver /api/cuentas/gastos) y gasto real de Meta del período ordenado por marca, ocasión y objetivo, y la ejecución de cada línea
  *     del presupuesto del año (ejecutado, % y saldo). Solo Meta por ahora; sin datos de ejemplo: si Windsor
  *     falla y no hay un resultado reciente, responde error.
  * PUT { inicio, lineas }  → guarda el presupuesto del año (con auditoría de quién lo cambió).
@@ -40,9 +41,10 @@ export async function GET(request: Request) {
 
   let presupuesto = null;
   let audit: Awaited<ReturnType<typeof listAudit>> = [];
+  let todosLosGastos: Awaited<ReturnType<typeof listGastos>> = [];
   const storeOk = readStoreConfig() !== null;
   try {
-    [presupuesto, audit] = await Promise.all([getPresupuesto(), listAudit()]);
+    [presupuesto, audit, todosLosGastos] = await Promise.all([getPresupuesto(), listAudit(), listGastos()]);
   } catch (err: any) {
     return NextResponse.json({ error: String(err?.message || err) }, { status: err instanceof CuentasError ? err.status : 502, headers: NO_STORE });
   }
@@ -57,7 +59,8 @@ export async function GET(request: Request) {
   const parsed = parseRange(new Request(`http://x/?${rangeSp.toString()}`));
   if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400, headers: NO_STORE });
 
-  const base = { configured: storeOk, presupuesto, audit, periodo: { desde: parsed.range.dateFrom, hasta: parsed.range.dateTo, dias: Math.round((Date.parse(parsed.range.dateTo) - Date.parse(parsed.range.dateFrom)) / 86400000) + 1 } };
+  const gastos = gastosDelPeriodo(todosLosGastos, parsed.range.dateFrom, parsed.range.dateTo);
+  const base = { configured: storeOk, presupuesto, audit, gastos, gastosPorCampana: gastosPorCampana(gastos), periodo: { desde: parsed.range.dateFrom, hasta: parsed.range.dateTo, dias: Math.round((Date.parse(parsed.range.dateTo) - Date.parse(parsed.range.dateFrom)) / 86400000) + 1 } };
   if (!hasWindsorCredentials()) {
     return NextResponse.json({ ...base, error: "Falta conectar Windsor.ai (WINDSOR_API_KEY): sin eso no hay gasto real para mostrar." }, { status: 503, headers: NO_STORE });
   }
@@ -91,7 +94,7 @@ export async function GET(request: Request) {
     const cuenta = sp.get("cuenta");
     const campanas = cuenta ? result.value.campaigns.filter((c) => normAccountId(c.accountId) === normAccountId(cuenta)) : result.value.campaigns;
     const resumen = resumir(campanas);
-    const ejecucion = presupuesto ? ejecucionPorLinea(presupuesto.lineas, resumen.porMarca) : null;
+    const ejecucion = presupuesto ? ejecucionPorLinea(presupuesto.lineas, resumen.porMarca, gastos) : null;
 
     return NextResponse.json({ ...base, source: "windsor", fuente: "Meta Ads", cuentas, cuenta: cuenta ?? null, resumen, ejecucion, warnings }, { headers: NO_STORE });
   } catch (err: any) {
