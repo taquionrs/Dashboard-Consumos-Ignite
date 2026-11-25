@@ -12,7 +12,7 @@ import type { PageKey, Session } from "@/lib/access";
  * (sesión que arma middleware.ts; ver lib/access.ts).
  */
 
-export function PageHeader({ title, sub, session, current, extra }: { title: string; sub: string; session: Session; current: "finanzas" | "medios" | "usuarios" | "equivalencias" | "cortes"; extra?: ReactNode }) {
+export function PageHeader({ title, sub, session, current, extra }: { title: string; sub: string; session: Session; current: "finanzas" | "medios" | "usuarios" | "equivalencias" | "cortes" | "cuentas"; extra?: ReactNode }) {
   return (
     <header className="top">
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
