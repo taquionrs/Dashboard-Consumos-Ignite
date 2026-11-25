@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "./PageChrome";
 import { fetchJson } from "@/lib/clientFetch";
 import type { Session } from "@/lib/access";
-import { MARCAS_CONOCIDAS, SIN_CLASIFICAR, type Grupo, type Linea, type LineaConEjecucion, type PresupuestoAnual, type Resumen } from "@/lib/cuentasCore";
+import { CATEGORIAS_GASTO, MARCAS_CONOCIDAS, SIN_CLASIFICAR, type GastoManual, type Grupo, type Linea, type LineaConEjecucion, type PresupuestoAnual, type Resumen } from "@/lib/cuentasCore";
 import type { CuentasAudit } from "@/lib/cuentas";
 
 /**
@@ -17,6 +17,8 @@ interface Respuesta {
   configured: boolean;
   presupuesto: PresupuestoAnual | null;
   audit: CuentasAudit[];
+  gastos: GastoManual[];
+  gastosPorCampana: { campana: string; monto: number; gastos: number }[];
   periodo: { desde: string; hasta: string; dias: number };
   fuente?: string;
   cuentas?: { accountId: string; accountName: string; gasto: number }[];
@@ -162,6 +164,8 @@ export default function CuentasView({ session }: { session: Session }) {
         />
       )}
 
+      {data?.presupuesto && <GastosCard data={data} onCambio={cargar} />}
+
       {r && !loading && (
         <>
           <section className="card">
@@ -296,7 +300,8 @@ function PresupuestoCard({ data, editando, onEditar, onGuardado }: { data: Respu
   const p = data.presupuesto;
   const ej = data.ejecucion;
   const totalMonto = p ? p.lineas.reduce((s, l) => s + l.monto, 0) : 0;
-  const totalEjec = ej ? ej.lineas.reduce((s, l) => s + (l.ejecutado ?? 0), 0) : 0;
+  const totalEjec = ej ? ej.lineas.reduce((s, l) => s + l.ejecutado, 0) : 0;
+  const totalMano = ej ? ej.lineas.reduce((s, l) => s + l.aMano, 0) : 0;
 
   if (editando || !p) {
     return <Editor inicial={p} puedeGuardar={data.configured} onCancelar={p ? () => onEditar(false) : undefined} onGuardado={onGuardado} />;
@@ -307,7 +312,7 @@ function PresupuestoCard({ data, editando, onEditar, onGuardado }: { data: Respu
         <div>
           <h2>Presupuesto del año por línea</h2>
           <div className="card-sub">
-            Plan desde {fmtDay(p.inicio)}. Lo ejecutado cuenta el gasto de Meta de las marcas de cada línea en el período elegido arriba
+            Plan desde {fmtDay(p.inicio)}. Lo ejecutado suma el gasto de Meta de las marcas de cada línea más los gastos cargados a mano, en el período elegido arriba
             {data.periodo.desde !== p.inicio ? " (para ver el acumulado del plan, elegí «Todo el plan»)" : ""}.
           </div>
         </div>
@@ -323,19 +328,21 @@ function PresupuestoCard({ data, editando, onEditar, onGuardado }: { data: Respu
               <th>Marcas</th>
               <th className="num">Presupuesto</th>
               <th className="num">Ejecutado</th>
+              <th className="num">De eso, a mano</th>
               <th className="num">% ejecutado</th>
               <th className="num">Saldo</th>
             </tr>
           </thead>
           <tbody>
-            {(ej?.lineas ?? p.lineas.map((l) => ({ ...l, ejecutado: null, pct: null, saldo: null }))).map((l) => (
+            {(ej?.lineas ?? p.lineas.map((l) => ({ ...l, ejecutado: 0, aMano: 0, pct: null, saldo: l.monto }))).map((l) => (
               <tr key={l.id}>
                 <td>{l.nombre}</td>
-                <td style={muted}>{l.marcas.length ? l.marcas.join(", ") : "Se carga a mano (próximo paso)"}</td>
+                <td style={muted}>{l.marcas.length ? l.marcas.join(", ") : "Solo gastos cargados a mano"}</td>
                 <td className="num">{fmtMoney(l.monto)}</td>
                 <td className="num">{fmtMoney(l.ejecutado)}</td>
+                <td className="num" style={muted}>{l.aMano ? fmtMoney(l.aMano) : "—"}</td>
                 <td className="num">{fmtPct(l.pct)}</td>
-                <td className="num" style={l.saldo !== null && l.saldo < 0 ? { color: "var(--status-critical, #c0392b)" } : undefined}>
+                <td className="num" style={l.saldo < 0 ? { color: "var(--status-critical, #c0392b)" } : undefined}>
                   {fmtMoney(l.saldo)}
                 </td>
               </tr>
@@ -350,6 +357,9 @@ function PresupuestoCard({ data, editando, onEditar, onGuardado }: { data: Respu
               </td>
               <td className="num">
                 <b>{ej ? fmtMoney(totalEjec) : "—"}</b>
+              </td>
+              <td className="num" style={muted}>
+                {ej && totalMano ? fmtMoney(totalMano) : "—"}
               </td>
               <td className="num">
                 <b>{ej && totalMonto > 0 ? fmtPct((totalEjec / totalMonto) * 100) : "—"}</b>
@@ -405,7 +415,7 @@ function Editor({ inicial, puedeGuardar, onCancelar, onGuardado }: { inicial: Pr
         <div>
           <h2>{inicial ? "Editar presupuesto del año" : "Cargar el presupuesto del año"}</h2>
           <div className="card-sub">
-            Una línea por rubro (por ejemplo EPA!, Torpedo, Conversión, Activaciones). Tildá las marcas cuyo gasto cuenta en cada línea; una línea sin marcas (shooting, activaciones) queda sin gasto automático.
+            Una línea por rubro (por ejemplo EPA!, Torpedo, Conversión, Activaciones). Tildá las marcas cuyo gasto cuenta en cada línea; una línea sin marcas (shooting, activaciones) se alimenta solo con los gastos que cargues a mano más abajo.
             Una marca tildada en dos líneas solo cuenta en la primera.
           </div>
         </div>
@@ -448,6 +458,167 @@ function Editor({ inicial, puedeGuardar, onCancelar, onGuardado }: { inicial: Pr
           </button>
         )}
       </div>
+    </section>
+  );
+}
+
+const hoy = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+
+interface Formulario {
+  id?: string;
+  fecha: string;
+  lineaId: string;
+  categoria: string;
+  detalle: string;
+  campana: string;
+  monto: string;
+}
+
+function GastosCard({ data, onCambio }: { data: Respuesta; onCambio: () => void }) {
+  const p = data.presupuesto!;
+  const vacio: Formulario = { fecha: hoy(), lineaId: p.lineas.find((l) => l.marcas.length === 0)?.id ?? p.lineas[0].id, categoria: "UGC", detalle: "", campana: "", monto: "" };
+  const [f, setF] = useState<Formulario>(vacio);
+  const [abierto, setAbierto] = useState(false);
+  const [trabajando, setTrabajando] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const nombreLinea = (id: string) => p.lineas.find((l) => l.id === id)?.nombre ?? "(línea quitada)";
+  const total = data.gastos.reduce((s, g) => s + g.monto, 0);
+
+  async function enviar() {
+    setTrabajando(true);
+    setErr(null);
+    try {
+      const body = { ...f, monto: Number(f.monto) };
+      await fetchJson("/api/cuentas/gastos", { method: f.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      setAbierto(false);
+      setF(vacio);
+      onCambio();
+    } catch (e) {
+      setErr(clean(e));
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function borrar(g: GastoManual) {
+    if (!window.confirm(`¿Borrar «${g.detalle}» por ${fmtMoney(g.monto)}? Queda registrado en la auditoría.`)) return;
+    setTrabajando(true);
+    setErr(null);
+    try {
+      await fetchJson(`/api/cuentas/gastos?id=${encodeURIComponent(g.id)}`, { method: "DELETE" });
+      onCambio();
+    } catch (e) {
+      setErr(clean(e));
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <h2>Gastos fuera de las plataformas: {fmtMoney(total)}</h2>
+          <div className="card-sub">
+            Pagos a creadores (UGC), envíos, shooting y todo lo que no sale de Meta. Cada gasto cuenta contra una línea del presupuesto. Acá se ven los del período elegido arriba.
+          </div>
+        </div>
+        {!abierto && (
+          <button
+            className="btn"
+            disabled={!data.configured}
+            onClick={() => {
+              setF(vacio);
+              setAbierto(true);
+            }}
+          >
+            + Cargar gasto
+          </button>
+        )}
+      </div>
+
+      {abierto && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+          <input type="date" value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
+          <select value={f.lineaId} onChange={(e) => setF({ ...f, lineaId: e.target.value })}>
+            {p.lineas.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.nombre}
+              </option>
+            ))}
+          </select>
+          <select value={f.categoria} onChange={(e) => setF({ ...f, categoria: e.target.value })}>
+            {CATEGORIAS_GASTO.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+          <input placeholder="Qué se pagó (ej. Pago UGC - cafeyroma)" value={f.detalle} onChange={(e) => setF({ ...f, detalle: e.target.value })} style={{ width: 260 }} />
+          <input placeholder="Campaña (opcional)" value={f.campana} onChange={(e) => setF({ ...f, campana: e.target.value })} style={{ width: 170 }} />
+          <input type="number" min={0} placeholder="Monto en pesos" value={f.monto} onChange={(e) => setF({ ...f, monto: e.target.value })} style={{ width: 140 }} />
+          <button className="btn primary" disabled={trabajando || !f.detalle.trim() || !(Number(f.monto) > 0)} onClick={enviar}>
+            {trabajando ? "Guardando…" : f.id ? "Guardar cambio" : "Guardar gasto"}
+          </button>
+          <button className="btn" disabled={trabajando} onClick={() => setAbierto(false)}>
+            Cancelar
+          </button>
+        </div>
+      )}
+      {err && <div className="alert-form-error">{err}</div>}
+
+      {data.gastos.length === 0 ? (
+        <div style={{ ...muted, fontSize: 12.5 }}>No hay gastos cargados en este período.</div>
+      ) : (
+        <>
+          <div className="table-scroll-x">
+            <table className="datatable">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Detalle</th>
+                  <th>Categoría</th>
+                  <th>Campaña</th>
+                  <th>Línea</th>
+                  <th className="num">Monto</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.gastos.map((g) => (
+                  <tr key={g.id}>
+                    <td style={{ whiteSpace: "nowrap" }}>{fmtDay(g.fecha)}</td>
+                    <td>{g.detalle}</td>
+                    <td>{g.categoria}</td>
+                    <td style={muted}>{g.campana || "—"}</td>
+                    <td>{nombreLinea(g.lineaId)}</td>
+                    <td className="num">{fmtMoney(g.monto)}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button
+                        className="btn"
+                        disabled={trabajando}
+                        onClick={() => {
+                          setF({ id: g.id, fecha: g.fecha, lineaId: g.lineaId, categoria: g.categoria, detalle: g.detalle, campana: g.campana, monto: String(g.monto) });
+                          setAbierto(true);
+                        }}
+                      >
+                        Editar
+                      </button>{" "}
+                      <button className="btn" disabled={trabajando} onClick={() => borrar(g)}>
+                        Borrar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data.gastosPorCampana.some((c) => c.campana !== "Sin campaña") && (
+            <div style={{ ...muted, fontSize: 12.5, marginTop: 10 }}>Por campaña: {data.gastosPorCampana.map((c) => `${c.campana} ${fmtMoney(c.monto)}`).join(" · ")}</div>
+          )}
+        </>
+      )}
+      {data.gastos.some((g) => !p.lineas.some((l) => l.id === g.lineaId)) && (
+        <div style={{ ...muted, fontSize: 12, marginTop: 8 }}>Hay gastos de una línea que ya no existe en el presupuesto: no suman a ninguna línea. Editalos para pasarlos a otra.</div>
+      )}
     </section>
   );
 }
