@@ -107,6 +107,8 @@ export interface Grupo {
   impresiones: number;
   clics: number;
   conversiones: number;
+  /** Suma del alcance de cada campaña: una misma persona alcanzada por dos campañas se cuenta dos veces. */
+  alcance: number;
   campanas: number;
 }
 
@@ -127,13 +129,14 @@ export interface Resumen {
   sinClasificar: { nombre: string; gasto: number; falta: string[] }[];
 }
 
-const vacio = (nombre: string): Grupo => ({ nombre, gasto: 0, impresiones: 0, clics: 0, conversiones: 0, campanas: 0 });
+const vacio = (nombre: string): Grupo => ({ nombre, gasto: 0, impresiones: 0, clics: 0, conversiones: 0, alcance: 0, campanas: 0 });
 
 function sumar(g: Grupo, c: CampaignRow) {
   g.gasto += c.spend;
   g.impresiones += c.impressions;
   g.clics += c.clicks;
   g.conversiones += c.conversions;
+  g.alcance += c.reach ?? 0;
   g.campanas += 1;
 }
 
@@ -185,6 +188,17 @@ export interface Linea {
   monto: number;
   /** Marcas cuyo gasto cuenta contra esta línea. Vacío = gasto que no sale de las plataformas (shooting, activaciones): se carga a mano más adelante. */
   marcas: string[];
+  /** Metas del plan de medios para esta línea (todas opcionales). Se comparan con lo real de las plataformas. */
+  metas?: Metas;
+}
+
+export interface Metas {
+  /** Impresiones esperadas en el plan. */
+  impresiones?: number;
+  /** Alcance esperado (personas). */
+  alcance?: number;
+  /** CPM de referencia, en pesos por mil impresiones. */
+  cpm?: number;
 }
 
 export interface PresupuestoAnual {
@@ -200,6 +214,8 @@ export interface LineaConEjecucion extends Linea {
   ejecutado: number;
   /** De ese total, lo cargado a mano (UGC, envíos, shooting...). */
   aMano: number;
+  /** Lo que midieron las plataformas para las marcas de la línea (sin lo cargado a mano). */
+  plataformas: { gasto: number; impresiones: number; alcance: number; cpm: number | null };
   /** 0–100; null si el monto es 0. */
   pct: number | null;
   saldo: number;
@@ -208,17 +224,23 @@ export interface LineaConEjecucion extends Linea {
 export function ejecucionPorLinea(lineas: Linea[], porMarca: Grupo[], gastos: GastoManual[] = []): { lineas: LineaConEjecucion[]; sinAsignar: number } {
   const gastoMarca = new Map(porMarca.map((g) => [g.nombre, g.gasto]));
   const usadas = new Set<string>();
+  const porNombre = new Map(porMarca.map((g) => [g.nombre, g]));
   const out = lineas.map((l) => {
     let plataformas = 0;
+    let impresiones = 0;
+    let alcance = 0;
     for (const m of l.marcas) {
       // Una marca en dos líneas se contaría dos veces: solo cuenta la primera.
       if (usadas.has(m)) continue;
       usadas.add(m);
       plataformas += gastoMarca.get(m) ?? 0;
+      impresiones += porNombre.get(m)?.impresiones ?? 0;
+      alcance += porNombre.get(m)?.alcance ?? 0;
     }
     const aMano = gastos.filter((g) => g.lineaId === l.id).reduce((s, g) => s + g.monto, 0);
     const ejecutado = plataformas + aMano;
-    return { ...l, ejecutado, aMano, pct: l.monto > 0 ? (ejecutado / l.monto) * 100 : null, saldo: l.monto - ejecutado };
+    const real = { gasto: plataformas, impresiones, alcance, cpm: impresiones > 0 ? (plataformas / impresiones) * 1000 : null };
+    return { ...l, ejecutado, aMano, plataformas: real, pct: l.monto > 0 ? (ejecutado / l.monto) * 100 : null, saldo: l.monto - ejecutado };
   });
   let sinAsignar = 0;
   for (const g of porMarca) if (!usadas.has(g.nombre)) sinAsignar += g.gasto;
@@ -283,6 +305,22 @@ export function gastosPorCampana(gastos: GastoManual[]): { campana: string; mont
   return [...m.values()].sort((a, b) => b.monto - a.monto);
 }
 
+/** undefined = sin metas, null = algo inválido, objeto = metas limpias. */
+function leerMetas(raw: unknown): Metas | undefined | null {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const out: Metas = {};
+  for (const k of ["impresiones", "alcance", "cpm"] as const) {
+    const v = r[k];
+    if (v === undefined || v === null || v === "" || v === 0) continue;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0 || n > 1e13) return null;
+    out[k] = Math.round(n * 100) / 100;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Valida lo que llega del navegador. Devuelve el presupuesto limpio o el motivo. */
@@ -306,7 +344,9 @@ export function validarPresupuesto(raw: unknown): PresupuestoAnual | { error: st
     let id = typeof l.id === "string" && /^[a-z0-9-]{1,40}$/.test(l.id) ? l.id : `l${i + 1}`;
     while (ids.has(id)) id += "x";
     ids.add(id);
-    lineas.push({ id, nombre, monto: Math.round(monto), marcas: [...new Set(marcas as string[])] });
+    const metas = leerMetas(l.metas);
+    if (metas === null) return { error: `Las metas de «${nombre}» no son válidas (números mayores a cero).` };
+    lineas.push({ id, nombre, monto: Math.round(monto), marcas: [...new Set(marcas as string[])], ...(metas ? { metas } : {}) });
   }
   return { inicio, lineas };
 }

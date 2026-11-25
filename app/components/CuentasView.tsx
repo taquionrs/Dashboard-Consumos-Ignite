@@ -164,6 +164,8 @@ export default function CuentasView({ session }: { session: Session }) {
         />
       )}
 
+      {data?.ejecucion && <MetasCard lineas={data.ejecucion.lineas} periodo={data.periodo} inicio={data.presupuesto?.inicio} />}
+
       {data?.presupuesto && <GastosCard data={data} onCambio={cargar} />}
 
       {r && !loading && (
@@ -334,7 +336,7 @@ function PresupuestoCard({ data, editando, onEditar, onGuardado }: { data: Respu
             </tr>
           </thead>
           <tbody>
-            {(ej?.lineas ?? p.lineas.map((l) => ({ ...l, ejecutado: 0, aMano: 0, pct: null, saldo: l.monto }))).map((l) => (
+            {(ej?.lineas ?? p.lineas.map((l) => ({ ...l, ejecutado: 0, aMano: 0, plataformas: { gasto: 0, impresiones: 0, alcance: 0, cpm: null }, pct: null, saldo: l.monto }))).map((l) => (
               <tr key={l.id}>
                 <td>{l.nombre}</td>
                 <td style={muted}>{l.marcas.length ? l.marcas.join(", ") : "Solo gastos cargados a mano"}</td>
@@ -393,6 +395,8 @@ function Editor({ inicial, puedeGuardar, onCancelar, onGuardado }: { inicial: Pr
   const [err, setErr] = useState<string | null>(null);
 
   const cambiar = (i: number, patch: Partial<Linea>) => setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const cambiarMeta = (i: number, k: "impresiones" | "alcance" | "cpm", v: string) =>
+    setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, metas: { ...l.metas, [k]: v === "" ? undefined : Number(v) } } : l)));
   const marcaEn = (i: number, m: string) =>
     cambiar(i, { marcas: lineas[i].marcas.includes(m) ? lineas[i].marcas.filter((x) => x !== m) : [...lineas[i].marcas, m] });
 
@@ -416,7 +420,7 @@ function Editor({ inicial, puedeGuardar, onCancelar, onGuardado }: { inicial: Pr
           <h2>{inicial ? "Editar presupuesto del año" : "Cargar el presupuesto del año"}</h2>
           <div className="card-sub">
             Una línea por rubro (por ejemplo EPA!, Torpedo, Conversión, Activaciones). Tildá las marcas cuyo gasto cuenta en cada línea; una línea sin marcas (shooting, activaciones) se alimenta solo con los gastos que cargues a mano más abajo.
-            Una marca tildada en dos líneas solo cuenta en la primera.
+            Una marca tildada en dos líneas solo cuenta en la primera. Si el plan de medios tiene metas (impresiones, alcance, CPM), cargalas: Pulso las compara con lo real.
           </div>
         </div>
       </div>
@@ -438,6 +442,12 @@ function Editor({ inicial, puedeGuardar, onCancelar, onGuardado }: { inicial: Pr
                 Quitar
               </button>
             )}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", width: "100%", fontSize: 12.5 }}>
+              <span style={muted}>Metas del plan (opcional):</span>
+              <input type="number" min={0} placeholder="Impresiones" value={l.metas?.impresiones || ""} onChange={(e) => cambiarMeta(i, "impresiones", e.target.value)} style={{ width: 130 }} />
+              <input type="number" min={0} placeholder="Alcance" value={l.metas?.alcance || ""} onChange={(e) => cambiarMeta(i, "alcance", e.target.value)} style={{ width: 120 }} />
+              <input type="number" min={0} placeholder="CPM de referencia" value={l.metas?.cpm || ""} onChange={(e) => cambiarMeta(i, "cpm", e.target.value)} style={{ width: 150 }} />
+            </div>
           </div>
         ))}
         <div>
@@ -619,6 +629,76 @@ function GastosCard({ data, onCambio }: { data: Respuesta; onCambio: () => void 
       {data.gastos.some((g) => !p.lineas.some((l) => l.id === g.lineaId)) && (
         <div style={{ ...muted, fontSize: 12, marginTop: 8 }}>Hay gastos de una línea que ya no existe en el presupuesto: no suman a ninguna línea. Editalos para pasarlos a otra.</div>
       )}
+    </section>
+  );
+}
+
+const nf = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+
+/** Metas del plan de medios contra lo que midieron las plataformas, por línea. */
+function MetasCard({ lineas, periodo, inicio }: { lineas: LineaConEjecucion[]; periodo: { desde: string; hasta: string }; inicio?: string }) {
+  const conMetas = lineas.filter((l) => l.metas && (l.metas.impresiones || l.metas.alcance || l.metas.cpm));
+  if (conMetas.length === 0) return null;
+  const filas = conMetas.flatMap((l) => {
+    const m = l.metas!;
+    const real = l.plataformas;
+    const out: { clave: string; linea: string; metrica: string; meta: string; real: string; cumple: string; nota?: string }[] = [];
+    if (m.impresiones) out.push({ clave: l.id + "i", linea: l.nombre, metrica: "Impresiones", meta: nf(m.impresiones), real: nf(real.impresiones), cumple: fmtPct((real.impresiones / m.impresiones) * 100) });
+    if (m.alcance)
+      out.push({ clave: l.id + "a", linea: l.nombre, metrica: "Alcance (aprox.)", meta: nf(m.alcance), real: nf(real.alcance), cumple: fmtPct((real.alcance / m.alcance) * 100), nota: "suma el alcance de cada campaña: una persona alcanzada por dos campañas cuenta dos veces" });
+    if (m.cpm)
+      out.push({
+        clave: l.id + "c",
+        linea: l.nombre,
+        metrica: "CPM",
+        meta: fmtMoney(m.cpm),
+        real: real.cpm === null ? "—" : fmtMoney(real.cpm),
+        cumple: real.cpm === null ? "—" : `${real.cpm <= m.cpm ? "" : "+"}${fmtPct(((real.cpm - m.cpm) / m.cpm) * 100)}`,
+        nota: "menos es mejor: el porcentaje es cuánto se aleja de la referencia",
+      });
+    return out;
+  });
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <h2>Metas del plan de medios</h2>
+          <div className="card-sub">
+            Lo que midió Meta para las marcas de cada línea contra lo que el plan esperaba, del {fmtDay(periodo.desde)} al {fmtDay(periodo.hasta)}.
+            {inicio && periodo.desde !== inicio ? " Las metas son de todo el plan: para compararlas elegí «Todo el plan»." : ""}
+          </div>
+        </div>
+      </div>
+      <div className="table-scroll-x">
+        <table className="datatable">
+          <thead>
+            <tr>
+              <th>Línea</th>
+              <th>Métrica</th>
+              <th className="num">Meta del plan</th>
+              <th className="num">Real</th>
+              <th className="num">Cumplimiento</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((f) => (
+              <tr key={f.clave}>
+                <td>{f.linea}</td>
+                <td>
+                  {f.metrica}
+                  {f.nota && <div style={{ ...muted, fontSize: 11 }}>{f.nota}</div>}
+                </td>
+                <td className="num">{f.meta}</td>
+                <td className="num">{f.real}</td>
+                <td className="num">
+                  <b>{f.cumple}</b>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ ...muted, fontSize: 11.5, marginTop: 8 }}>El alcance de 3 o más contactos y la frecuencia única no se pueden calcular sumando campañas; por ahora no se comparan.</div>
     </section>
   );
 }
